@@ -21,6 +21,7 @@ import argparse
 import json
 import queue
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -428,23 +429,43 @@ def make_handler(board: Board, flasher: Flasher):
     return Handler
 
 
+def lan_ip() -> str:
+    """This machine's address on the local network. Opens no connection."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))       # UDP: picks a route, sends nothing
+        return s.getsockname()[0]
+    except OSError:
+        return "127.0.0.1"
+    finally:
+        s.close()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", default="COM3", help="serial port (default COM3)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--http-port", type=int, default=8787)
     ap.add_argument("--no-open", action="store_true", help="don't launch a browser")
+    ap.add_argument("--lan", action="store_true",
+                    help="let other devices on your network open the dashboard")
     args = ap.parse_args()
 
     board = Board(args.port, args.baud)
     flasher = Flasher(board, args.port)
     threading.Thread(target=board.run, daemon=True).start()
 
+    host = "0.0.0.0" if args.lan else "127.0.0.1"
     url = f"http://127.0.0.1:{args.http_port}/"
-    httpd = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(board, flasher))
+    httpd = ThreadingHTTPServer((host, args.http_port), make_handler(board, flasher))
     httpd.daemon_threads = True
+
     print(f"dashboard: {url}   (serial {args.port} @ {args.baud})")
-    print("Ctrl-C to stop. Stop this before running flash.ps1.")
+    if args.lan:
+        print(f"on your network: http://{lan_ip()}:{args.http_port}/")
+        print("  ! Anyone on this network can open it, control the buzzer and LED,")
+        print("    and reflash the board. Only use --lan on a network you trust.")
+    print("Ctrl-C to stop.")
 
     if not args.no_open:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
