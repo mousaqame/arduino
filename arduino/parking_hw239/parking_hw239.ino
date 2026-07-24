@@ -68,6 +68,10 @@ Zone          lastZone    = Z_FAR;
 bool          manualMode  = false;
 bool          manualLed   = false;
 
+// False when the screen didn't answer on I2C. Everything else runs regardless;
+// only the drawing is skipped.
+bool          oledOk      = false;
+
 unsigned long lastMeasure = 0;
 unsigned long lastTelem   = 0;
 unsigned long lastDisplay = 0;
@@ -111,21 +115,26 @@ void setup() {
   EEPROM.get(EEPROM_ADDR, cfg);
   if (cfg.magic != EEPROM_MAGIC) loadDefaults();
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("ERR oled init failed"));
-    while (1);
+  // See the note in parking_serial.ino: a missing screen used to stop the board
+  // dead here, which looks exactly like an unprogrammed board from the PC.
+  oledOk = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
+
+  if (oledOk) {
+    Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
+
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(15, 24);            // centred on the taller screen
+    display.println(F("READY"));
+    display.display();
+    delay(2000);
+  } else {
+    Serial.println(F("# no screen found at 0x3C - check its A4/A5 wires"));
+    Serial.println(F("# everything else still works, carrying on without it"));
   }
-  Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
 
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(2);
-  display.setCursor(15, 24);              // centred on the taller screen
-  display.println(F("READY"));
-  display.display();
-  delay(2000);
-
-  Serial.println(F("# parking_serial ready"));
+  Serial.println(F("# parking_hw239 ready"));
   printConfig();
 }
 
@@ -207,6 +216,7 @@ void serviceBuzzer(unsigned long now) {
 }
 
 void drawDisplay() {
+  if (!oledOk) return;
   display.clearDisplay();
 
   // Twice the rows, so the distance gets to be the size it deserves.
