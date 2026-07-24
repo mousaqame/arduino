@@ -5,7 +5,13 @@
   "status": "active",
   "kind": "arduino",
   "started": "2026-07-24",
-  "tags": ["uno", "hc-sr04", "ssd1306", "serial", "dashboard"],
+  "tags": [
+    "uno",
+    "hc-sr04",
+    "ssd1306",
+    "serial",
+    "dashboard"
+  ],
   "hardware": [
     "Arduino Uno (COM3)",
     "HC-SR04 — VCC:5V, GND:GND, TRIG:9, ECHO:10",
@@ -14,14 +20,28 @@
     "Piezo buzzer — + to pin 7, - to GND"
   ],
   "docs": [
-    { "label": "How it was built", "path": "docs/guide.html" },
-    { "label": "Readme", "path": "README.md" },
-    { "label": "Firmware", "path": "parking_serial/parking_serial.ino" }
+    {
+      "label": "How it was built",
+      "path": "docs/guide.html"
+    },
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Firmware",
+      "path": "parking_serial/parking_serial.ino"
+    }
   ],
   "apps": [
     {
       "label": "Build it & control it",
-      "cmd": ["python", "dashboard.py", "--no-open"],
+      "cmd": [
+        "python",
+        "dashboard.py",
+        "--no-open",
+        "--lan"
+      ],
       "port": 8787
     }
   ],
