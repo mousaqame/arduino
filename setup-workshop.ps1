@@ -80,7 +80,9 @@ if ($Pack) {
     $libZip = Join-Path $stick 'libraries.zip'
     if (Test-Path $libZip) { Remove-Item $libZip -Force }
     Compress-Archive -Path "$libDir\*" -DestinationPath $libZip
-    Ok ("libraries.zip  {0:N0} MB" -f ((Get-Item $libZip).Length / 1MB))
+    # The libraries are small (headers, a few hundred KB) - show KB so it never
+    # rounds to a scary "0 MB".
+    Ok ("libraries.zip  {0:N0} KB" -f ((Get-Item $libZip).Length / 1KB))
   } else {
     Warn "No libraries at $libDir - target PCs will fail to compile the OLED sketches."
   }
@@ -94,6 +96,21 @@ if ($Pack) {
 
   Copy-Item $PSCommandPath (Join-Path $stick 'setup-workshop.ps1') -Force
   Ok 'setup-workshop.ps1 copied'
+
+  Step 'Python installer'
+  # If a python installer sits next to this script, carry it along so target PCs
+  # need no internet at all. Optional: without it, the install side falls back to
+  # winget (which does need internet). Gitignored, so it never bloats the repo.
+  $pyInst = Get-ChildItem $here -Filter 'python-*.exe' -ErrorAction SilentlyContinue |
+            Sort-Object Name -Descending | Select-Object -First 1
+  if ($pyInst) {
+    Copy-Item $pyInst.FullName (Join-Path $stick 'python-installer.exe') -Force
+    Ok ("python-installer.exe  {0:N0} MB - the stick is now fully offline" -f ($pyInst.Length / 1MB))
+  } else {
+    Warn 'No python-*.exe next to this script - target PCs will need internet for Python.'
+    Say  'To bundle it: download the Windows installer from python.org into this'
+    Say  'folder (any name starting python-), then run -Pack again.'
+  }
 
   Write-Host "`nDone. On each new PC: open PowerShell as Administrator in" -ForegroundColor Green
   Write-Host "$stick and run  .\setup-workshop.ps1" -ForegroundColor Green
@@ -152,10 +169,20 @@ $py = Find-Python
 if ($py) {
   Ok "$py  ($(& $py --version 2>&1))"
 } else {
-  Say 'not found - installing'
-  winget install --id Python.Python.3.13 --silent `
-    --accept-package-agreements --accept-source-agreements | Out-Null
-  # winget updates PATH for NEW shells, not this one, so look on disk.
+  # Prefer a bundled installer (offline stick); fall back to winget (needs net).
+  $bundled = Join-Path $here 'python-installer.exe'
+  if (Test-Path $bundled) {
+    Say 'not found - installing from the bundled installer (no internet needed)'
+    # All-users + PrependPath so it lands in Program Files\Python3x and on PATH.
+    $p = Start-Process $bundled -Wait -PassThru -ArgumentList `
+      '/quiet','InstallAllUsers=1','PrependPath=1','Include_test=0','Include_launcher=1'
+    if ($p.ExitCode -ne 0) { Warn "installer exit $($p.ExitCode)" }
+  } else {
+    Say 'not found - installing with winget (needs internet)'
+    winget install --id Python.Python.3.13 --silent `
+      --accept-package-agreements --accept-source-agreements | Out-Null
+  }
+  # PATH does not update in THIS shell, so look on disk.
   $py = Find-Python
   if ($py) { Ok "installed: $py" }
   else { Bad 'Python install failed'; $problems += 'python' }

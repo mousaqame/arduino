@@ -17,3 +17,6 @@ robot/robot/secrets.h
 # and there is no reason for it to be in a public repo.
 .vercel/
 **/.vercel/
+
+# Bundled Python installer for the offline setup stick (large, fetched per-machine)
+python-*.exe
