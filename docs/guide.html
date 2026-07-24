@@ -1,0 +1,635 @@
+<title>Parking Sensor Build Guide</title>
+
+<style>
+  :root {
+    --ground:  #eef2f1;
+    --surface: #ffffff;
+    --sunken:  #e6ecea;
+    --ink:     #0f1a1c;
+    --muted:   #55686a;
+    --line:    #d3dcdb;
+    --accent:  #0e7c72;
+    --accent-w:#0e7c7218;
+
+    --far:    #64748b;
+    --close:  #0ea5e9;
+    --good:   #16a34a;
+    --vclose: #d97706;
+    --stop:   #dc2626;
+
+    --shadow: 0 1px 2px rgba(15,26,28,.05), 0 8px 24px rgba(15,26,28,.05);
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:  #0a1113;
+      --surface: #0f1719;
+      --sunken:  #0c1315;
+      --ink:     #dde7e7;
+      --muted:   #8a9d9e;
+      --line:    #1e2c2e;
+      --accent:  #2dd4bf;
+      --accent-w:#2dd4bf1c;
+
+      --far:    #7c8b9c;
+      --close:  #38bdf8;
+      --good:   #22c55e;
+      --vclose: #f59e0b;
+      --stop:   #ef4444;
+
+      --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+
+  :root[data-theme="dark"] {
+    --ground:#0a1113; --surface:#0f1719; --sunken:#0c1315;
+    --ink:#dde7e7; --muted:#8a9d9e; --line:#1e2c2e;
+    --accent:#2dd4bf; --accent-w:#2dd4bf1c;
+    --far:#7c8b9c; --close:#38bdf8; --good:#22c55e; --vclose:#f59e0b; --stop:#ef4444;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+  }
+  :root[data-theme="light"] {
+    --ground:#eef2f1; --surface:#ffffff; --sunken:#e6ecea;
+    --ink:#0f1a1c; --muted:#55686a; --line:#d3dcdb;
+    --accent:#0e7c72; --accent-w:#0e7c7218;
+    --far:#64748b; --close:#0ea5e9; --good:#16a34a; --vclose:#d97706; --stop:#dc2626;
+    --shadow: 0 1px 2px rgba(15,26,28,.05), 0 8px 24px rgba(15,26,28,.05);
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 16px/1.7 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 1180px; margin: 0 auto; padding: 0 24px 96px; }
+
+  /* ---- masthead ---- */
+
+  .mast { padding: 72px 0 34px; }
+
+  .eyebrow {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; letter-spacing: .16em; text-transform: uppercase;
+    color: var(--accent); margin: 0 0 18px;
+  }
+
+  h1 {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: clamp(2rem, 5.2vw, 3.1rem);
+    line-height: 1.08; letter-spacing: -.035em; font-weight: 700;
+    margin: 0 0 18px; text-wrap: balance; max-width: 20ch;
+  }
+
+  .standfirst {
+    font-size: 1.16rem; color: var(--muted);
+    max-width: 62ch; margin: 0 0 30px;
+  }
+
+  /* zone gradient rule — the device's own colour language */
+  .zonebar { display: flex; height: 6px; border-radius: 3px; overflow: hidden; }
+  .zonebar i { flex: 1; }
+  .zonebar i:nth-child(1) { background: var(--stop);   flex: .7; }
+  .zonebar i:nth-child(2) { background: var(--vclose); flex: .7; }
+  .zonebar i:nth-child(3) { background: var(--good);   flex: 2.1; }
+  .zonebar i:nth-child(4) { background: var(--close);  flex: 3.5; }
+  .zonebar i:nth-child(5) { background: var(--far);    flex: 2.8; }
+
+  .facts {
+    display: flex; flex-wrap: wrap; gap: 10px; margin-top: 26px;
+  }
+  .fact {
+    display: flex; flex-direction: column; gap: 2px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px 15px; min-width: 116px;
+  }
+  .fact b {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 1.14rem; font-weight: 650; font-variant-numeric: tabular-nums;
+  }
+  .fact span {
+    font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--muted);
+  }
+
+  /* ---- layout ---- */
+
+  .cols { display: grid; grid-template-columns: 208px minmax(0,1fr); gap: 56px; align-items: start; }
+  @media (max-width: 940px) { .cols { grid-template-columns: 1fr; gap: 0; } nav.toc { display: none; } }
+
+  nav.toc { position: sticky; top: 28px; }
+  nav.toc p {
+    font-size: 10.5px; letter-spacing: .15em; text-transform: uppercase;
+    color: var(--muted); margin: 0 0 12px; padding-bottom: 10px;
+    border-bottom: 1px solid var(--line);
+  }
+  nav.toc ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 3px; }
+  nav.toc a {
+    display: flex; gap: 10px; padding: 4px 0;
+    color: var(--muted); text-decoration: none; font-size: 13.5px;
+  }
+  nav.toc a em {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-style: normal; color: var(--accent); opacity: .65; font-size: 12px; padding-top: 1px;
+  }
+  nav.toc a:hover { color: var(--ink); }
+  nav.toc a:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 4px; }
+
+  /* ---- content ---- */
+
+  article { min-width: 0; display: flex; flex-direction: column; gap: 54px; }
+
+  section { scroll-margin-top: 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  .head { display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid var(--line); padding-bottom: 12px; }
+  .num {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 12px; color: var(--accent); letter-spacing: .1em;
+    padding-top: 6px; flex: none;
+  }
+  h2 {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 1.42rem; letter-spacing: -.02em; font-weight: 650;
+    margin: 0; text-wrap: balance;
+  }
+
+  h3 {
+    font-size: 1rem; font-weight: 650; margin: 12px 0 -4px;
+    letter-spacing: -.005em;
+  }
+
+  p { margin: 0; max-width: 68ch; }
+  article ul { margin: 0; padding-left: 20px; max-width: 68ch; display: flex; flex-direction: column; gap: 7px; }
+  article ol { margin: 0; padding-left: 22px; max-width: 68ch; display: flex; flex-direction: column; gap: 7px; }
+
+  a { color: var(--accent); text-underline-offset: 2px; }
+
+  code {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: .875em; background: var(--accent-w);
+    padding: .12em .38em; border-radius: 4px;
+  }
+
+  .code {
+    background: var(--sunken); border: 1px solid var(--line);
+    border-radius: 10px; overflow-x: auto;
+  }
+  .code pre { margin: 0; padding: 15px 17px; }
+  .code code {
+    background: none; padding: 0; border-radius: 0;
+    font-size: 13px; line-height: 1.65; color: var(--ink);
+    display: block; white-space: pre;
+  }
+  .code .c { color: var(--muted); font-style: italic; }
+  .code .k { color: var(--accent); }
+
+  /* callout — the gotchas that cost real debugging time */
+  .note {
+    display: flex; flex-direction: column; gap: 7px;
+    background: var(--surface); border: 1px solid var(--line);
+    border-left: 3px solid var(--vclose);
+    border-radius: 0 10px 10px 0; padding: 14px 18px;
+  }
+  .note.stop { border-left-color: var(--stop); }
+  .note b {
+    font-size: 10.5px; letter-spacing: .13em; text-transform: uppercase;
+    color: var(--vclose); font-weight: 650;
+  }
+  .note.stop b { color: var(--stop); }
+  .note p { font-size: .945rem; }
+
+  .tablewrap { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; font-size: .9rem; }
+  th, td { text-align: left; padding: 10px 15px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  th {
+    font-size: 10.5px; letter-spacing: .12em; text-transform: uppercase;
+    color: var(--muted); font-weight: 650; white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td code { white-space: nowrap; }
+  td:first-child { white-space: nowrap; }
+  .cmds td:last-child { white-space: normal; }
+
+  /* zone legend */
+  .zones { display: flex; flex-wrap: wrap; gap: 8px; }
+  .zone {
+    display: flex; align-items: center; gap: 8px;
+    border: 1px solid var(--line); background: var(--surface);
+    border-radius: 999px; padding: 5px 14px 5px 8px; font-size: .855rem;
+  }
+  .zone i { width: 9px; height: 9px; border-radius: 50%; flex: none; }
+  .zone span { color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  footer {
+    margin-top: 72px; padding-top: 22px; border-top: 1px solid var(--line);
+    color: var(--muted); font-size: .875rem;
+    display: flex; flex-wrap: wrap; gap: 8px 20px; align-items: baseline;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { transition: none !important; animation: none !important; }
+  }
+</style>
+
+<div class="wrap">
+
+  <header class="mast">
+    <p class="eyebrow">Arduino Uno · HC-SR04 · SSD1306</p>
+    <h1>Parking sensor with a live dashboard</h1>
+    <p class="standfirst">
+      A reproducible build record: from a blocking standalone sketch to firmware that
+      streams telemetry over USB while a browser retunes it in real time. Windows,
+      using only the toolchain hidden inside the Arduino IDE.
+    </p>
+    <div class="zonebar" role="presentation"><i></i><i></i><i></i><i></i><i></i></div>
+    <div class="facts">
+      <div class="fact"><b>9.9 Hz</b><span>Telemetry</span></div>
+      <div class="fact"><b>65%</b><span>Flash used</span></div>
+      <div class="fact"><b>37%</b><span>RAM used</span></div>
+      <div class="fact"><b>1</b><span>Dependency</span></div>
+    </div>
+  </header>
+
+  <div class="cols">
+
+    <nav class="toc">
+      <p>Contents</p>
+      <ol>
+        <li><a href="#p0"><em>00</em>Hardware</a></li>
+        <li><a href="#p1"><em>01</em>Toolchain</a></li>
+        <li><a href="#p2"><em>02</em>Flash script</a></li>
+        <li><a href="#p3"><em>03</em>Firmware</a></li>
+        <li><a href="#p4"><em>04</em>Protocol</a></li>
+        <li><a href="#p5"><em>05</em>Dashboard</a></li>
+        <li><a href="#p6"><em>06</em>Running it</a></li>
+        <li><a href="#p7"><em>07</em>Troubleshooting</a></li>
+        <li><a href="#p8"><em>08</em>Rebuilding</a></li>
+      </ol>
+    </nav>
+
+    <article>
+
+      <section id="p0">
+        <div class="head"><span class="num">00</span><h2>Hardware</h2></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Component</th><th>Pin</th><th>Notes</th></tr></thead>
+            <tbody>
+              <tr><td>HC-SR04 trigger</td><td><code>9</code></td><td>10 µs pulse starts a reading</td></tr>
+              <tr><td>HC-SR04 echo</td><td><code>10</code></td><td>pulse width encodes distance</td></tr>
+              <tr><td>LED</td><td><code>6</code></td><td>needs a 220–330 Ω series resistor</td></tr>
+              <tr><td>Piezo buzzer</td><td><code>7</code></td><td>driven by <code>tone()</code>, which uses Timer2</td></tr>
+              <tr><td>SSD1306 OLED</td><td><code>A4</code> / <code>A5</code></td><td>I²C, address <code>0x3C</code>, 128×32</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>Confirm Windows sees the board before anything else:</p>
+        <div class="code"><pre><code>Get-CimInstance Win32_PnPEntity |
+  Where-Object { $_.Name -match 'COM\d+' } | Select-Object Name, DeviceID</code></pre></div>
+        <p>
+          You want <code>Arduino Uno (COM3)</code>. A genuine Uno reports
+          <code>VID_2341&amp;PID_0043</code>; CH340-based clones show a different name and
+          work identically. Note the COM number — everything below uses it.
+        </p>
+      </section>
+
+      <section id="p1">
+        <div class="head"><span class="num">01</span><h2>The toolchain you already have</h2></div>
+        <p>
+          Installing Arduino IDE 1.8.x also installs a complete command-line toolchain
+          that most people never touch. There is nothing else to download.
+        </p>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Tool</th><th>Job</th></tr></thead>
+            <tbody>
+              <tr><td><code>arduino-builder.exe</code></td><td>resolves libraries, generates prototypes, drives the compiler</td></tr>
+              <tr><td><code>avr-gcc.exe</code></td><td>compiles</td></tr>
+              <tr><td><code>avrdude.exe</code></td><td>writes flash over USB</td></tr>
+              <tr><td><code>avr-size.exe</code></td><td>reports flash and RAM usage</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The first lives in the install root; the rest in
+          <code>hardware\tools\avr\bin</code>. Three libraries are needed, all from the
+          IDE's Library Manager: <code>Adafruit_SSD1306</code>,
+          <code>Adafruit_GFX_Library</code>, and <code>Adafruit_BusIO</code> — the last
+          arrives automatically as a dependency.
+        </p>
+      </section>
+
+      <section id="p2">
+        <div class="head"><span class="num">02</span><h2>The flash script</h2></div>
+        <p>
+          A wrapper around two commands: <code>arduino-builder</code> to compile, then
+          <code>avrdude</code> to upload. <code>-VerifyOnly</code> stops after compiling,
+          so a broken sketch never reaches a working board.
+        </p>
+        <div class="code"><pre><code><span class="c"># compile</span>
+arduino-builder.exe -compile `
+  -hardware "&lt;ide&gt;\hardware" -tools "&lt;ide&gt;\tools-builder" `
+  -tools "&lt;ide&gt;\hardware\tools\avr" `
+  -built-in-libraries "&lt;ide&gt;\libraries" -libraries "&lt;sketchbook&gt;\libraries" `
+  "-fqbn=arduino:avr:uno" -build-path &lt;build&gt; &lt;sketch&gt;.ino
+
+<span class="c"># upload</span>
+avrdude.exe -C "&lt;ide&gt;\hardware\tools\avr\etc\avrdude.conf" `
+  -p atmega328p -c arduino -P COM3 -b 115200 -D `
+  -U "flash:w:&lt;build&gt;\&lt;sketch&gt;.ino.hex:i"</code></pre></div>
+
+        <div class="note">
+          <b>PowerShell trap · argument expansion</b>
+          <p>
+            <code>-fqbn=$Fqbn</code> passes the literal text <code>$Fqbn</code> and the
+            build fails with <em>invalid fqbn</em>. Quote the whole token —
+            <code>"-fqbn=$Fqbn"</code> — so the variable actually expands.
+          </p>
+        </div>
+
+        <div class="note">
+          <b>PowerShell trap · stderr redirection</b>
+          <p>
+            Never pipe a native executable through <code>2&gt;&amp;1</code> in PowerShell 5.1.
+            avrdude writes its progress bars to stderr; redirecting wraps each line in an
+            ErrorRecord and reports failure even when the upload returned exit code 0.
+          </p>
+        </div>
+      </section>
+
+      <section id="p3">
+        <div class="head"><span class="num">03</span><h2>Firmware: the blocking problem</h2></div>
+        <p>The original sketch beeped like this:</p>
+        <div class="code"><pre><code>tone(buzzerPin, 1000);
+delay(100);
+noTone(buzzerPin);
+delay(400);   <span class="c">// nothing else happens for half a second</span></code></pre></div>
+        <p>
+          Fine for a standalone sketch. It breaks the moment serial is added: incoming
+          commands sit unread in a 64-byte buffer while the CPU idles inside
+          <code>delay()</code>, and anything past 64 bytes is silently dropped.
+        </p>
+        <p>
+          The fix is a state machine on <code>millis()</code>. Rather than
+          <em>waiting</em>, record when the last change happened and check whether enough
+          time has passed:
+        </p>
+        <div class="code"><pre><code><span class="k">void</span> serviceBuzzer(<span class="k">unsigned long</span> now) {
+  <span class="k">if</span> (beepFreq == 0) {
+    <span class="k">if</span> (beepAudible) { noTone(buzzerPin); beepAudible = <span class="k">false</span>; }
+    <span class="k">return</span>;
+  }
+  <span class="k">if</span> (beepOnMs == 0 &amp;&amp; beepOffMs == 0) {          <span class="c">// continuous tone</span>
+    <span class="k">if</span> (!beepAudible) { tone(buzzerPin, beepFreq); beepAudible = <span class="k">true</span>; }
+    <span class="k">return</span>;
+  }
+  <span class="k">unsigned int</span> phaseLen = beepAudible ? beepOnMs : beepOffMs;
+  <span class="k">if</span> (now - beepPhaseAt &gt;= phaseLen) {            <span class="c">// time to flip</span>
+    beepPhaseAt = now;
+    beepAudible = !beepAudible;
+    <span class="k">if</span> (beepAudible) tone(buzzerPin, beepFreq); <span class="k">else</span> noTone(buzzerPin);
+  }
+}</code></pre></div>
+        <p>The loop then never blocks — each job runs on its own interval:</p>
+        <div class="code"><pre><code><span class="k">void</span> loop() {
+  <span class="k">unsigned long</span> now = millis();
+  serviceSerial();
+  <span class="k">if</span> (now - lastMeasure &gt;= MEASURE_MS)   { lastMeasure = now; measure(); applyZone(); }
+  serviceBuzzer(now);
+  <span class="k">if</span> (now - lastDisplay &gt;= DISPLAY_MS)   { lastDisplay = now; drawDisplay(); }
+  <span class="k">if</span> (now - lastTelem   &gt;= TELEMETRY_MS) { lastTelem   = now; sendTelemetry(now); }
+}</code></pre></div>
+
+        <h3>Two gotchas this build hit</h3>
+
+        <div class="note">
+          <b>Custom types need their own header</b>
+          <p>
+            <code>arduino-builder</code> auto-generates function prototypes and injects
+            them right after your <code>#include</code> lines. A function like
+            <code>const char *zoneName(Zone z)</code> gets a prototype <em>above</em> the
+            <code>enum Zone</code> that defines it, and the build fails with
+            <em>'Zone' was not declared in this scope</em>. Move the enum and struct into
+            a <code>types.h</code> beside the sketch and include it — the prototypes then
+            land after the types are known.
+          </p>
+        </div>
+
+        <div class="note">
+          <b>The OLED redraw can starve the loop</b>
+          <p>
+            A full 128×32 refresh is 512 bytes over I²C. At the default 100 kHz that is
+            roughly 50 ms — half the telemetry budget — and the stream ran at 8 Hz instead
+            of 10. Adding <code>Wire.setClock(400000)</code> <em>after</em>
+            <code>display.begin()</code> measured 9.9 Hz with a median gap of exactly
+            100 ms. <code>begin()</code> sets its own clock, so calling it earlier does
+            nothing.
+          </p>
+        </div>
+      </section>
+
+      <section id="p4">
+        <div class="head"><span class="num">04</span><h2>The serial protocol</h2></div>
+        <p>
+          Deliberately plain text: newline-terminated, human-readable, debuggable from any
+          serial monitor. No binary framing, no checksums — USB serial is reliable enough
+          at this scale, and being able to type <code>GET</code> into a terminal is worth
+          more than the bytes saved.
+        </p>
+        <p>Board to PC, streamed at 10 Hz:</p>
+        <div class="code"><pre><code>T &lt;millis&gt; &lt;distance_cm&gt; &lt;zone&gt;      <span class="c">e.g.  T 12345 42.5 GOOD</span></code></pre></div>
+        <p>
+          <code>999.0</code> means the sensor got no echo. Replies are <code>OK …</code>,
+          <code>ERR …</code>, or <code>#&nbsp;…</code> for informational lines.
+        </p>
+        <div class="tablewrap">
+          <table class="cmds">
+            <thead><tr><th>Command</th><th>Effect</th></tr></thead>
+            <tbody>
+              <tr><td><code>PING</code></td><td>replies <code>OK PONG</code> — liveness check</td></tr>
+              <tr><td><code>GET</code></td><td>dump current configuration</td></tr>
+              <tr><td><code>SET &lt;zone&gt; &lt;cm&gt;</code></td><td>retune a threshold, 1–400 cm</td></tr>
+              <tr><td><code>MODE AUTO|MANUAL</code></td><td>MANUAL freezes the parking logic's LED and buzzer control</td></tr>
+              <tr><td><code>LED ON|OFF|AUTO</code></td><td>manual override; requires MANUAL mode</td></tr>
+              <tr><td><code>BUZZ &lt;freq&gt; &lt;ms&gt;</code></td><td>one-shot beep, 31–5000 Hz</td></tr>
+              <tr><td><code>MUTE ON|OFF</code></td><td>silence the buzzer, keep everything else</td></tr>
+              <tr><td><code>SAVE</code></td><td>persist thresholds to EEPROM</td></tr>
+              <tr><td><code>RESET</code></td><td>restore defaults; does not auto-save</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <h3>Zones</h3>
+        <div class="zones">
+          <div class="zone"><i style="background:var(--far)"></i>FAR <span>&gt; 100 cm</span></div>
+          <div class="zone"><i style="background:var(--close)"></i>CLOSE <span>&gt; 50</span></div>
+          <div class="zone"><i style="background:var(--good)"></i>GOOD <span>&gt; 20</span></div>
+          <div class="zone"><i style="background:var(--vclose)"></i>V.CLOSE <span>&gt; 10</span></div>
+          <div class="zone"><i style="background:var(--stop)"></i>STOP! <span>≤ 10</span></div>
+        </div>
+
+        <p>
+          Parsing is <code>strtok</code> plus <code>strcasecmp</code> into a fixed 48-byte
+          buffer — no <code>String</code> objects, which fragment the Uno's 2 KB of RAM.
+          Every literal is wrapped in <code>F()</code> so it stays in flash. Final usage
+          lands at 65% flash and 37% RAM.
+        </p>
+
+        <h3>Why saving is explicit</h3>
+        <p>
+          Config is a struct guarded by a magic number: read it on boot, and if the magic
+          doesn't match, the EEPROM was never written so load defaults instead. Writing is
+          triggered only by <code>SAVE</code>, never automatically on every
+          <code>SET</code> — EEPROM endures roughly 100,000 writes, and live-tuning with a
+          slider would burn through that quickly.
+        </p>
+        <div class="code"><pre><code>EEPROM.get(EEPROM_ADDR, cfg);
+<span class="k">if</span> (cfg.magic != EEPROM_MAGIC) loadDefaults();</code></pre></div>
+      </section>
+
+      <section id="p5">
+        <div class="head"><span class="num">05</span><h2>The PC dashboard</h2></div>
+        <p>
+          Two files. Python owns the serial port and serves; the browser renders.
+        </p>
+        <div class="code"><pre><code>browser  &lt;--SSE---&gt;  dashboard.py  &lt;--serial--&gt;  Arduino
+         &lt;--POST--&gt;</code></pre></div>
+        <p>
+          A web page cannot open a COM port, so something native has to hold the
+          connection. A small Python process sits in the middle: it reads telemetry, fans
+          it out to browser clients over Server-Sent Events, and relays commands back via
+          <code>POST /cmd</code>. SSE rather than WebSockets because the data flows almost
+          entirely one way and SSE needs no dependencies — <code>http.server</code> plus a
+          <code>text/event-stream</code> response is enough. The only third-party package
+          in the whole project is <code>pyserial</code>.
+        </p>
+
+        <h3>What matters in the bridge</h3>
+        <p>
+          <b>Opening the port reboots the board.</b> The USB-serial chip toggles DTR on
+          connect, and <code>setup()</code> then holds its splash for two seconds. Sleep
+          about three seconds after opening before expecting sane data.
+        </p>
+        <p>
+          <b>Never let a slow client stall the reader.</b> Each browser gets a bounded
+          queue; if it fills, drop frames rather than block the serial thread.
+        </p>
+        <div class="code"><pre><code><span class="k">try</span>:
+    q.put_nowait(event)
+<span class="k">except</span> queue.Full:
+    <span class="k">pass</span>   <span class="c"># slow client — drop rather than stall</span></code></pre></div>
+        <p>
+          <b>Buffer history server-side</b> so a browser opening late gets a populated
+          chart instead of an empty one. A <code>deque(maxlen=240)</code> holds about 24
+          seconds at 10 Hz.
+        </p>
+
+        <h3>What matters in the UI</h3>
+        <p>
+          <b>Repaint on <code>requestAnimationFrame</code>, not per message.</b> At 10 Hz
+          it barely matters, but decoupling render rate from data rate means a faster board
+          can never out-run the renderer.
+        </p>
+        <p>
+          <b>Median-filter the headline number.</b> HC-SR04 sensors throw occasional wild
+          readings — consecutive samples during testing measured 338, 342, <b>44</b>, 341 cm.
+          A median of the last three kills the flicker without hiding anything: the chart
+          still plots raw, and the exact raw value stays visible in the subtitle.
+        </p>
+        <p>
+          <b>Don't clobber an input the user is typing in.</b> Config updates arrive
+          continuously, so track which field has focus and skip it on refresh.
+        </p>
+
+        <div class="note stop">
+          <b>No echo is not zero centimetres</b>
+          <p>
+            An early version pinned the proximity marker to the far-left of the bar on a
+            no-echo reading — the red STOP end — implying something was touching the sensor
+            when in fact nothing was in range. Hide the marker instead of placing it at
+            zero. Sensor absence and sensor danger must never render alike.
+          </p>
+        </div>
+      </section>
+
+      <section id="p6">
+        <div class="head"><span class="num">06</span><h2>Running it</h2></div>
+        <div class="code"><pre><code>python dashboard.py          <span class="c"># then open http://127.0.0.1:8787</span></code></pre></div>
+        <div class="note stop">
+          <b>The one thing everyone trips over</b>
+          <p>
+            Only one process can hold a serial port. Stop the dashboard before flashing, or
+            <code>avrdude</code> fails with <em>access denied</em>.
+          </p>
+        </div>
+        <p>Order of operations when changing firmware:</p>
+        <ol>
+          <li>Stop the dashboard with <code>Ctrl-C</code>.</li>
+          <li>Compile alone: <code>flash.ps1 -Sketch parking_serial -VerifyOnly</code></li>
+          <li>Upload: <code>flash.ps1 -Sketch parking_serial</code></li>
+          <li>Start the dashboard again.</li>
+        </ol>
+      </section>
+
+      <section id="p7">
+        <div class="head"><span class="num">07</span><h2>Troubleshooting</h2></div>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Symptom</th><th>Cause and fix</th></tr></thead>
+            <tbody>
+              <tr><td><code>access denied</code> on upload</td><td>The dashboard or a serial monitor holds the port. Close it.</td></tr>
+              <tr><td><code>not in sync</code></td><td>Wrong COM port, or the board needs a manual reset as the upload starts.</td></tr>
+              <tr><td>Dashboard shows disconnected</td><td>Board unplugged, or another program grabbed the port. It retries every 2 s on its own.</td></tr>
+              <tr><td><code>'Zone' was not declared</code></td><td>Custom type used in a function signature — move it to <code>types.h</code>.</td></tr>
+              <tr><td>Distance always <code>999</code></td><td>Echo and trigger pins swapped, or the sensor isn't getting a solid 5 V.</td></tr>
+              <tr><td>OLED blank, board otherwise fine</td><td>Wrong I²C address. Most 128×32 modules are <code>0x3C</code>, some <code>0x3D</code>.</td></tr>
+              <tr><td>Telemetry slower than 10 Hz</td><td><code>Wire.setClock(400000)</code> missing, or called before <code>display.begin()</code>.</td></tr>
+              <tr><td>Thresholds reset on power cycle</td><td>They were changed but never committed with <code>SAVE</code>.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <section id="p8">
+        <div class="head"><span class="num">08</span><h2>Rebuilding from scratch</h2></div>
+        <ol>
+          <li>Install Arduino IDE 1.8.x — it supplies the entire toolchain.</li>
+          <li>Library Manager → install <code>Adafruit SSD1306</code>, accepting the GFX and BusIO dependencies.</li>
+          <li>Install Python 3, then <code>pip install pyserial</code>.</li>
+          <li>Copy the project folder anywhere.</li>
+          <li>Wire per section 00, confirm the COM port, and adjust <code>-Port</code> if it isn't COM3.</li>
+          <li>Flash <code>parking_serial</code>, then run <code>dashboard.py</code>.</li>
+        </ol>
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Path</th><th>Role</th></tr></thead>
+            <tbody>
+              <tr><td><code>parking_serial/</code></td><td>firmware currently on the board</td></tr>
+              <tr><td><code>parking_serial/types.h</code></td><td>enum and config struct, split out for prototype ordering</td></tr>
+              <tr><td><code>parking_sensor/</code></td><td>original sketch, untouched — the restore point</td></tr>
+              <tr><td><code>flash.ps1</code></td><td>compile and upload</td></tr>
+              <tr><td><code>dashboard.py</code></td><td>serial bridge and web server</td></tr>
+              <tr><td><code>dashboard.html</code></td><td>dashboard UI</td></tr>
+              <tr><td><code>.build/</code></td><td>compiler output — safe to delete</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p>
+          The original sketch is preserved untouched, so flashing
+          <code>parking_sensor</code> returns the board to exactly its prior state at any
+          time.
+        </p>
+      </section>
+
+    </article>
+  </div>
+
+  <footer>
+    <span>Arduino Uno · ATmega328P · COM3 @ 115200</span>
+    <span>21,264 bytes flash · 749 bytes RAM</span>
+  </footer>
+</div>
