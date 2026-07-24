@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Workshop</title>
+<style>
+  :root {
+    --ground:#f4f6f5; --surface:#ffffff; --sunken:#eaeeed;
+    --ink:#111a1b; --muted:#5a6c6e; --line:#d8e0df;
+    --accent:#0e7c72; --accent-w:#0e7c7214;
+
+    --active:#16a34a; --paused:#d97706; --done:#0284c7; --archived:#8b9a9b;
+    --shadow:0 1px 2px rgba(17,26,27,.04), 0 6px 18px rgba(17,26,27,.05);
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#0c1214; --surface:#121b1d; --sunken:#0e1618;
+      --ink:#dce6e6; --muted:#8a9c9d; --line:#1f2d2f;
+      --accent:#2dd4bf; --accent-w:#2dd4bf18;
+      --active:#22c55e; --paused:#f59e0b; --done:#38bdf8; --archived:#6b7b7c;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 6px 18px rgba(0,0,0,.22);
+    }
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin:0; background:var(--ground); color:var(--ink);
+    font:15px/1.6 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+
+  .wrap { max-width:1240px; margin:0 auto; padding:0 22px 80px; }
+
+  /* ---- header ---- */
+  header {
+    display:flex; align-items:flex-end; gap:18px; flex-wrap:wrap;
+    padding:36px 0 20px;
+  }
+  header h1 { margin:0; font-size:1.65rem; letter-spacing:-.025em; font-weight:680; }
+  header .root {
+    font-family:var(--mono); font-size:12px; color:var(--muted);
+    margin:4px 0 0;
+  }
+  .grow { flex:1; }
+
+  button {
+    font:inherit; font-weight:550; cursor:pointer; border-radius:8px;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+    padding:8px 14px; transition:border-color .12s, background .12s;
+  }
+  button:hover { border-color:var(--muted); }
+  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color:#062a26; } }
+  button.primary:hover { filter:brightness(1.08); }
+  button.sm { padding:5px 11px; font-size:13px; }
+
+  /* ---- toolbar ---- */
+  .toolbar {
+    display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+    padding-bottom:18px; border-bottom:1px solid var(--line); margin-bottom:24px;
+  }
+  input[type=text], input[type=search], textarea, select {
+    font:inherit; padding:8px 12px; border-radius:8px;
+    border:1px solid var(--line); background:var(--surface); color:var(--ink);
+  }
+  input:focus, textarea:focus, select:focus { outline:none; border-color:var(--accent); }
+  #q { flex:1; min-width:200px; }
+
+  .chips { display:flex; gap:6px; flex-wrap:wrap; }
+  .chip {
+    padding:6px 12px; border-radius:999px; font-size:13px;
+    border:1px solid var(--line); background:var(--surface); color:var(--muted);
+    cursor:pointer; user-select:none;
+  }
+  .chip[aria-pressed="true"] { border-color:var(--accent); color:var(--accent); background:var(--accent-w); }
+
+  /* ---- cards ---- */
+  .grid {
+    display:grid; grid-template-columns:repeat(auto-fill, minmax(330px,1fr)); gap:16px;
+  }
+
+  .card {
+    background:var(--surface); border:1px solid var(--line); border-radius:12px;
+    box-shadow:var(--shadow); display:flex; flex-direction:column;
+    overflow:hidden;
+  }
+  /* severity stripe encodes status without needing to read the pill */
+  .card { border-top:3px solid var(--archived); }
+  .card[data-status=active]   { border-top-color:var(--active); }
+  .card[data-status=paused]   { border-top-color:var(--paused); }
+  .card[data-status=done]     { border-top-color:var(--done); }
+
+  .card .body { padding:16px 17px; display:flex; flex-direction:column; gap:9px; flex:1; }
+
+  .titlerow { display:flex; align-items:baseline; gap:10px; }
+  .card h3 { margin:0; font-size:1.06rem; font-weight:650; letter-spacing:-.01em; flex:1; }
+
+  .pill {
+    font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; font-weight:650;
+    padding:3px 9px; border-radius:999px; white-space:nowrap;
+    border:1px solid currentColor;
+  }
+  .pill.active{color:var(--active)} .pill.paused{color:var(--paused)}
+  .pill.done{color:var(--done)}     .pill.archived{color:var(--archived)}
+
+  .summary { color:var(--muted); font-size:.925rem; margin:0; }
+  .summary.empty { font-style:italic; opacity:.7; }
+
+  .meta {
+    display:flex; gap:6px 14px; flex-wrap:wrap; margin-top:auto; padding-top:4px;
+    font-family:var(--mono); font-size:11.5px; color:var(--muted);
+    font-variant-numeric:tabular-nums;
+  }
+
+  .tags { display:flex; gap:5px; flex-wrap:wrap; }
+  .tag {
+    font-size:11px; padding:2px 8px; border-radius:5px;
+    background:var(--sunken); color:var(--muted);
+  }
+
+  .foot {
+    border-top:1px solid var(--line); background:var(--sunken);
+    padding:11px 17px; display:flex; flex-direction:column; gap:9px;
+  }
+  .row { display:flex; gap:7px; flex-wrap:wrap; align-items:center; }
+  .rowlabel {
+    font-size:10px; letter-spacing:.12em; text-transform:uppercase;
+    color:var(--muted); width:100%; margin-bottom:-3px;
+  }
+
+  a.doc {
+    font-size:12.5px; text-decoration:none; color:var(--ink);
+    border:1px solid var(--line); background:var(--surface);
+    padding:4px 10px; border-radius:6px;
+  }
+  a.doc:hover { border-color:var(--accent); color:var(--accent); }
+
+  .app { display:flex; align-items:center; gap:7px; }
+  .dot { width:7px; height:7px; border-radius:50%; background:var(--archived); flex:none; }
+  .dot.on { background:var(--active); box-shadow:0 0 0 3px color-mix(in srgb, var(--active) 22%, transparent); }
+  .applabel { font-size:12.5px; }
+  .ext { font-size:10.5px; color:var(--muted); font-family:var(--mono); }
+
+  /* ---- unregistered ---- */
+  h2.sec {
+    font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+    margin:38px 0 14px; padding-bottom:9px; border-bottom:1px solid var(--line);
+  }
+  .unreg {
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+    background:var(--surface); border:1px dashed var(--line);
+    border-radius:10px; padding:11px 15px;
+  }
+  .unreg b { font-weight:600; }
+  .unreg .k { font-family:var(--mono); font-size:11.5px; color:var(--muted); }
+
+  /* ---- dialog ---- */
+  dialog {
+    border:1px solid var(--line); border-radius:14px; padding:0;
+    background:var(--surface); color:var(--ink); max-width:520px; width:calc(100% - 40px);
+    box-shadow:0 20px 60px rgba(0,0,0,.28);
+  }
+  dialog::backdrop { background:rgba(8,14,15,.55); }
+  dialog form { display:flex; flex-direction:column; gap:14px; padding:22px; }
+  dialog h2 { margin:0; font-size:1.15rem; font-weight:650; }
+  .field { display:flex; flex-direction:column; gap:5px; }
+  .field label { font-size:11px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); }
+  .field .hint { font-size:12px; color:var(--muted); }
+  .field input, .field select, .field textarea { width:100%; }
+  .actions { display:flex; gap:9px; justify-content:flex-end; }
+  .err { color:#dc2626; font-size:13px; min-height:18px; }
+  @media (prefers-color-scheme: dark) { .err { color:#f87171; } }
+
+  .empty-state {
+    text-align:center; color:var(--muted); padding:56px 20px;
+    border:1px dashed var(--line); border-radius:12px;
+  }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div>
+      <h1>Workshop</h1>
+      <p class="root" id="root">…</p>
+    </div>
+    <div class="grow"></div>
+    <button class="primary" id="new">New project</button>
+  </header>
+
+  <div class="toolbar">
+    <input type="search" id="q" placeholder="Search name, summary, tags…" aria-label="Search projects">
+    <div class="chips" id="statusChips" role="group" aria-label="Filter by status"></div>
+  </div>
+
+  <div class="grid" id="grid"></div>
+  <div id="unregWrap"></div>
+</div>
+
+<dialog id="dlg">
+  <form method="dialog" id="form">
+    <h2>New project</h2>
+    <div class="field">
+      <label for="f-name">Name</label>
+      <input type="text" id="f-name" required placeholder="Line Following Robot">
+    </div>
+    <div class="field">
+      <label for="f-slug">Folder</label>
+      <input type="text" id="f-slug" required pattern="[a-z0-9][a-z0-9-]*" placeholder="line-following-robot">
+      <span class="hint">Lowercase letters, digits and dashes. Created under the workshop root.</span>
+    </div>
+    <div class="field">
+      <label for="f-summary">Summary</label>
+      <input type="text" id="f-summary" placeholder="What it does, in a sentence.">
+    </div>
+    <div class="field">
+      <label for="f-kind">Kind</label>
+      <select id="f-kind">
+        <option value="arduino">Arduino — scaffolds a sketch and flash script</option>
+        <option value="python">Python</option>
+        <option value="node">Node / web</option>
+        <option value="other">Other</option>
+      </select>
+    </div>
+    <div class="field">
+      <label for="f-tags">Tags</label>
+      <input type="text" id="f-tags" placeholder="uno, sensors, robotics">
+    </div>
+    <p class="err" id="err"></p>
+    <div class="actions">
+      <button type="button" id="cancel">Cancel</button>
+      <button type="button" class="primary" id="create">Create project</button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+const $ = id => document.getElementById(id);
+const STATUSES = ['active', 'paused', 'done', 'archived'];
+
+let data = { projects: [], unregistered: [], root: '' };
+let filterStatus = new Set(['active', 'paused', 'done']);   // archived hidden by default
+let query = '';
+
+// ---- data ---------------------------------------------------------------
+
+async function load() {
+  const r = await fetch('/api/projects');
+  data = await r.json();
+  render();
+}
+
+async function post(path, body) {
+  const r = await fetch(path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body || {})
+  });
+  return r.json();
+}
+
+// ---- rendering ----------------------------------------------------------
+
+const esc = s => String(s ?? '').replace(/[&<>"]/g, c =>
+  ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function ago(ts) {
+  if (!ts) return '—';
+  const d = (Date.now() / 1000) - ts;
+  if (d < 3600) return Math.max(1, Math.round(d / 60)) + 'm ago';
+  if (d < 86400) return Math.round(d / 3600) + 'h ago';
+  if (d < 86400 * 30) return Math.round(d / 86400) + 'd ago';
+  return Math.round(d / (86400 * 30)) + 'mo ago';
+}
+
+function matches(p) {
+  if (!filterStatus.has(p.status)) return false;
+  if (!query) return true;
+  const hay = [p.name, p.summary, p.dir, ...(p.tags || [])].join(' ').toLowerCase();
+  return hay.includes(query);
+}
+
+function renderChips() {
+  $('statusChips').innerHTML = STATUSES.map(s => {
+    const n = data.projects.filter(p => p.status === s).length;
+    return `<button class="chip" data-status="${s}" aria-pressed="${filterStatus.has(s)}">
+              ${s}${n ? ` <b>${n}</b>` : ''}</button>`;
+  }).join('');
+  $('statusChips').querySelectorAll('.chip').forEach(c => c.onclick = () => {
+    const s = c.dataset.status;
+    filterStatus.has(s) ? filterStatus.delete(s) : filterStatus.add(s);
+    render();
+  });
+}
+
+function appHtml(p, app, i) {
+  const st = app.state || {};
+  // Build from the address this page was opened on, not a hardcoded loopback —
+  // otherwise a phone on the LAN would point these links at itself.
+  const open = app.port ? `http://${location.hostname}:${app.port}/` : null;
+  const bits = [`<span class="dot ${st.running ? 'on' : ''}"></span>`,
+                `<span class="applabel">${esc(app.label || 'App')}</span>`];
+  if (st.running && open) bits.push(`<a class="doc" href="${open}" target="_blank" rel="noopener">Open</a>`);
+  if (st.managed) bits.push(`<button class="sm" data-stop="${st.key}">Stop</button>`);
+  else if (st.external) bits.push(`<span class="ext">running outside hub</span>`);
+  else bits.push(`<button class="sm" data-launch="${p.slug}" data-index="${i}">Launch</button>`);
+  if (st.exit !== null && st.exit !== undefined && !st.running)
+    bits.push(`<span class="ext">exited ${st.exit}</span>`);
+  return `<div class="app">${bits.join('')}</div>`;
+}
+
+function cardHtml(p) {
+  const docs = (p.docs || []).map(d =>
+    `<a class="doc" href="/doc/${encodeURIComponent(p.slug)}/${d.path}" target="_blank" rel="noopener">${esc(d.label)}</a>`
+  ).join('');
+  const apps = (p.apps || []).map((a, i) => appHtml(p, a, i)).join('');
+  const links = (p.links || []).filter(l => /^https?:\/\//i.test(l.url)).map(l =>
+    `<a class="doc" href="${esc(l.url)}" target="_blank" rel="noopener">${esc(l.label)} &#8599;</a>`
+  ).join('');
+  const tags = (p.tags || []).map(t => `<span class="tag">${esc(t)}</span>`).join('');
+
+  return `<article class="card" data-status="${esc(p.status)}">
+    <div class="body">
+      <div class="titlerow">
+        <h3>${esc(p.name)}</h3>
+        <span class="pill ${esc(p.status)}">${esc(p.status)}</span>
+      </div>
+      <p class="summary ${p.summary ? '' : 'empty'}">${esc(p.summary || 'No summary yet.')}</p>
+      ${tags ? `<div class="tags">${tags}</div>` : ''}
+      <div class="meta">
+        <span>${esc(p.dir)}</span><span>${p.files ?? '—'} files</span><span>${ago(p.touched)}</span>
+      </div>
+    </div>
+    <div class="foot">
+      ${apps ? `<div class="row"><span class="rowlabel">Start here</span>${apps}</div>` : ''}
+      ${links ? `<div class="row"><span class="rowlabel">Opens</span>${links}</div>` : ''}
+      ${docs ? `<div class="row"><span class="rowlabel">Reference</span>${docs}</div>` : ''}
+      <div class="row">
+        <span class="rowlabel">Status</span>
+        <select data-slug="${esc(p.slug)}" class="statusSel">
+          ${STATUSES.map(s => `<option ${s === p.status ? 'selected' : ''}>${s}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </article>`;
+}
+
+function render() {
+  $('root').textContent = data.root;
+  renderChips();
+
+  const shown = data.projects.filter(matches);
+  $('grid').innerHTML = shown.length
+    ? shown.map(cardHtml).join('')
+    : `<div class="empty-state" style="grid-column:1/-1">
+         ${data.projects.length ? 'Nothing matches those filters.'
+                                : 'No projects registered yet. Create one, or register a folder below.'}
+       </div>`;
+
+  const u = data.unregistered || [];
+  $('unregWrap').innerHTML = u.length
+    ? `<h2 class="sec">Unregistered folders</h2>
+       <div style="display:flex;flex-direction:column;gap:9px">
+         ${u.map(f => `<div class="unreg">
+            <b>${esc(f.dir)}</b>
+            <span class="k">${f.error ? esc(f.error) : esc(f.guess || '')} · ${ago(f.touched)}</span>
+            <div class="grow"></div>
+            ${f.error ? '' : `<button class="sm" data-register="${esc(f.dir)}">Register</button>`}
+          </div>`).join('')}
+       </div>`
+    : '';
+
+  wire();
+}
+
+function wire() {
+  document.querySelectorAll('[data-launch]').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Starting…';
+    await post('/api/launch', { slug: b.dataset.launch, index: +b.dataset.index });
+    setTimeout(load, 900);
+  });
+  document.querySelectorAll('[data-stop]').forEach(b => b.onclick = async () => {
+    b.disabled = true; b.textContent = 'Stopping…';
+    await post('/api/stop', { key: b.dataset.stop });
+    setTimeout(load, 500);
+  });
+  document.querySelectorAll('[data-register]').forEach(b => b.onclick = async () => {
+    b.disabled = true;
+    const r = await post('/api/register', { dir: b.dataset.register });
+    if (!r.ok) { alert(r.error); b.disabled = false; return; }
+    load();
+  });
+  document.querySelectorAll('.statusSel').forEach(sel => sel.onchange = async () => {
+    await post('/api/status', { slug: sel.dataset.slug, status: sel.value });
+    load();
+  });
+}
+
+// ---- new project --------------------------------------------------------
+
+const slugify = s => s.toLowerCase().trim()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
+
+let slugTouched = false;
+$('f-name').addEventListener('input', () => {
+  if (!slugTouched) $('f-slug').value = slugify($('f-name').value);
+});
+$('f-slug').addEventListener('input', () => slugTouched = true);
+
+$('new').onclick = () => {
+  $('err').textContent = ''; slugTouched = false;
+  $('form').reset();
+  $('dlg').showModal();
+  $('f-name').focus();
+};
+$('cancel').onclick = () => $('dlg').close();
+
+$('create').onclick = async () => {
+  const payload = {
+    name: $('f-name').value.trim(),
+    slug: $('f-slug').value.trim(),
+    summary: $('f-summary').value.trim(),
+    kind: $('f-kind').value,
+    tags: $('f-tags').value
+  };
+  if (!payload.name || !payload.slug) { $('err').textContent = 'Name and folder are required.'; return; }
+  $('create').disabled = true;
+  const r = await post('/api/create', payload);
+  $('create').disabled = false;
+  if (!r.ok) { $('err').textContent = r.error; return; }
+  $('dlg').close();
+  load();
+};
+
+$('q').addEventListener('input', e => { query = e.target.value.toLowerCase().trim(); render(); });
+
+// ---- polling ------------------------------------------------------------
+
+load();
+setInterval(() => {
+  const anyRunning = data.projects.some(p => (p.apps || []).some(a => a.state?.running));
+  if (anyRunning || document.visibilityState === 'visible') load();
+}, 5000);
+</script>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{
+  "name": "Thermometer",
+  "summary": "DHT11 temperature and humidity sensor that reports continuously to a browser page, with a comfort band, min/max tracking, and a half-hour history.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-07-24",
+  "tags": [
+    "uno",
+    "dht11",
+    "temperature",
+    "humidity",
+    "dashboard"
+  ],
+  "hardware": [
+    "Arduino Uno (COM7 — the third board)",
+    "DHT11 — VCC:5V, DATA:D2, GND:GND"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Firmware",
+      "path": "temp_serial/temp_serial.ino"
+    }
+  ],
+  "apps": [
+    {
+      "label": "Build it & watch it",
+      "cmd": [
+        "python",
+        "dashboard.py",
+        "--no-open",
+        "--lan"
+      ],
+      "port": 8790
+    }
+  ],
+  "notes": "Uses the DHT_sensor_library already installed in the sketchbook. A DHT11 reads in whole degrees, is accurate to about +-2C, and refuses to be read faster than about once a second, so telemetry is every 2.5s rather than 10Hz like the other projects."
+}

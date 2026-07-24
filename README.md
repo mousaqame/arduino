@@ -1,100 +1,51 @@
-# Arduino workshop
+# The Workshop
 
-Headless compile + upload for the Arduino Uno on **COM3**, plus a live PC
-dashboard. Uses the toolchain that ships with Arduino IDE 1.8.16
-(`C:\Program Files (x86)\Arduino`) — nothing else to install.
+Arduino projects, each with its own wiring, firmware, and a browser dashboard
+that can flash the board and show what it's doing.
 
-## Hardware (car parking sensor)
+**Double-click `Start Workshop.bat`** to open the hub. Every project is one
+click from there. Closing that window stops everything.
 
-One row per wire — the middle column is the marking on the part itself.
+| Project | Board | Port | Dashboard |
+| --- | --- | --- | --- |
+| [arduino](arduino/) — Car Parking Sensor | Uno | COM3 | 8787 |
+| [robot](robot/) — Servo Robot | NodeMCU ESP8266 | COM6 | 8788 |
+| [gas-sensor](gas-sensor/) — Gas Leak Detector | Uno | COM8 | 8789 |
+| [temp-sensor](temp-sensor/) — Thermometer | Uno | COM7 | 8790 |
+| [knob-servo](knob-servo/) — Knob & Servo | Mega 2560 | — | 8792 |
+| [hub](hub/) — the catalog itself | — | — | 8080 |
+| [web](web/) — public site (paused) | — | — | static |
 
-| Part | Leg | Arduino pin |
-| --- | --- | --- |
-| SSD1306 OLED · 128x32 · addr `0x3C` | `VCC` | `5V` |
-| | `GND` | `GND` |
-| | `SDA` | `A4` |
-| | `SCL` | `A5` |
-| HC-SR04 ultrasonic | `VCC` | `5V` |
-| | `GND` | `GND` |
-| | `TRIG` | `9` |
-| | `ECHO` | `10` |
-| LED | long leg (+) | `6`, via a 220–330 Ω resistor |
-| | short leg (−) | `GND` |
-| Piezo buzzer | `+` | `7` |
-| | `−` | `GND` |
+Three separate Unos, told apart by COM port — not one board moved around. A
+dashboard saying "no board found" usually just means that one isn't plugged in.
 
-A few OLED modules are 3.3V only — check the silkscreen and use `3V3` if so.
-Unmarked piezo buzzers are not polarised and work either way round.
+## How a project is put together
 
-## Sketches
+Each folder holds a sketch, a `flash.ps1` that compiles and uploads it, a
+`dashboard.py` serving a browser page, and a `project.json` that tells the hub
+what to show and how to launch it.
 
-- `parking_serial/` — **currently on the board.** The parking sensor plus a
-  serial control/telemetry link. Same behaviour as the original, but beeps are
-  millis-timed instead of `delay()`-blocked so serial stays responsive.
-- `parking_sensor/` — the original, untouched. **Restore point:** flashing it
-  puts the board back exactly how it was.
-- `blink/` — LED on pin 6 blinks 5x, pauses 5s, repeats. Demo only.
+The dashboards do something worth knowing about: they hold the serial port to
+read telemetry, and hand it to `avrdude` when you press flash, then take it
+back. That hand-off is flag-based on purpose — closing a pyserial handle from
+another thread while a read is blocked tears down Windows' overlapped IO
+mid-read, which once made a board disappear from Windows until it was
+physically replugged.
 
-## Dashboard
+## Building on a fresh machine
 
-```bash
-python dashboard.py
-```
+1. Arduino IDE 1.8.x — supplies the whole toolchain, no `arduino-cli` needed
+2. `pip install pyserial`
+3. Library Manager: `Adafruit SSD1306`, `DHT sensor library`
+4. Boards Manager: `esp8266` (for the robot only)
+5. Check your COM ports and adjust each `flash.ps1` default if they differ
 
-Opens <http://127.0.0.1:8787>. Two tabs:
+## Notes for later
 
-- **Set it up** — a guided walkthrough for someone building this for the first
-  time: plug in, wire up (with a diagram), send the code, test it. Each step
-  reports its own state, so a wrong pin or missing board is visible rather than
-  mysterious.
-- **Live view** — distance readout, zone bar, rolling chart, threshold editors,
-  and a serial log.
-
-Flags: `--port COM4`, `--http-port 9000`, `--no-open`.
-
-## Flashing
-
-Easiest from the **Set it up** tab — pick a sketch and press the button. The
-dashboard hands the serial port to avrdude and takes it back afterwards, so
-nothing needs stopping by hand.
-
-From a terminal instead:
-
-```bash
-powershell -File flash.ps1 -Sketch parking_serial
-```
-
-Add `-VerifyOnly` to compile without touching the board. Other flags:
-`-Port COM4`, `-Fqbn arduino:avr:nano`, `-Mcu atmega328p`.
-
-> Only one process can hold a serial port. Running `flash.ps1` in a terminal
-> while the dashboard is up fails with "access denied" — use the Set it up tab,
-> or stop the dashboard first.
-
-## Serial protocol
-
-115200 baud. Telemetry streams at 10 Hz:
-
-```
-T <millis> <distance_cm> <zone>     e.g.  T 12345 42.5 GOOD
-```
-
-`distance` is `999.0` when the sensor gets no echo. Replies are `OK ...`,
-`ERR ...`, or `# ...` for informational lines.
-
-| Command | Effect |
-| --- | --- |
-| `PING` | `OK PONG` |
-| `GET` | dump current config |
-| `SET <FAR\|CLOSE\|GOOD\|VCLOSE> <cm>` | retune a zone threshold (1–400) |
-| `MODE <AUTO\|MANUAL>` | MANUAL freezes the parking logic's LED/buzzer control |
-| `LED <ON\|OFF\|AUTO>` | manual override; needs MANUAL mode |
-| `BUZZ <freq> <ms>` | one-shot beep (31–5000 Hz, 1–5000 ms) |
-| `MUTE <ON\|OFF>` | silence the buzzer, keep everything else |
-| `SAVE` | persist thresholds to EEPROM |
-| `RESET` | restore built-in defaults (does not auto-save) |
-
-Zones, with defaults: `>100` FAR · `>50` CLOSE · `>20` GOOD · `>10` V.CLOSE ·
-else STOP!. Thresholds survive a power cycle only after `SAVE`.
-
-`.build/` holds compiler output and can be deleted at any time.
+- `Start Workshop.bat` passes `--lan`, so other devices on the network can
+  reach it. Use the IP address it prints, not the computer name — the name
+  resolves to IPv6 and these servers listen on IPv4 only.
+- Reaching it from another computer also needs a firewall rule:
+  `New-NetFirewallRule -DisplayName "Workshop servers" -Direction Inbound -Action Allow -Protocol TCP -LocalPort 8080,8787,8788,8789,8790,8792 -Profile Private`
+- `gravixar-hq` lives in this folder but is a separate project with its own
+  repo, and is deliberately excluded here.

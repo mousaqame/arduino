@@ -1,0 +1,430 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knob &amp; Servo</title>
+<style>
+  :root{
+    --ground:#f3f6f6; --panel:#fff; --sunken:#e9efee; --ink:#101a1c;
+    --muted:#56696b; --line:#d5dedd; --accent:#0e7c72; --knob:#7c3aed;
+    --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --shadow:0 1px 2px rgba(16,26,28,.05), 0 8px 24px rgba(16,26,28,.06);
+    --mono: ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ground:#0a1013; --panel:#111a1c; --sunken:#0d1517; --ink:#dfe9e9;
+      --muted:#8a9c9e; --line:#1e2c2f; --accent:#2dd4bf; --knob:#a78bfa;
+      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+       font:15.5px/1.65 ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 20px 72px}
+  header{display:flex;align-items:center;gap:16px;padding:22px 0 0;flex-wrap:wrap}
+  header h1{margin:0;font-size:1.3rem;font-weight:670;letter-spacing:-.02em}
+  .grow{flex:1}
+  .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--bad)}
+  .dot.ok{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 20%,transparent)}
+  .dot.warn{background:var(--warn)}
+  .tabs{display:flex;gap:4px;margin:18px 0 22px;border-bottom:1px solid var(--line)}
+  .tab{font:inherit;font-weight:560;cursor:pointer;background:none;border:none;color:var(--muted);
+       padding:10px 16px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+  button{font:inherit;font-weight:550;cursor:pointer;border-radius:8px;border:1px solid var(--line);
+         background:var(--panel);color:var(--ink);padding:8px 15px}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  @media (prefers-color-scheme: dark){button.primary{color:#06302b}}
+  button.big{padding:12px 22px;font-size:1.02rem;font-weight:620}
+  button.sm{padding:6px 12px;font-size:13.5px}
+  button.active{border-color:var(--accent);color:var(--accent)}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:19px}
+  .panel h2{margin:0 0 14px;font-size:11px;font-weight:660;letter-spacing:.14em;
+            text-transform:uppercase;color:var(--muted)}
+  [hidden]{display:none !important}
+  .cols{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,1fr);gap:16px}
+  @media (max-width:860px){.cols{grid-template-columns:1fr}}
+  .stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+  .dialwrap{display:flex;align-items:center;gap:26px;flex-wrap:wrap;justify-content:center}
+  .dial{width:min(300px,70vw)}
+  .dial svg{width:100%;height:auto;display:block}
+  .readouts{display:flex;flex-direction:column;gap:12px;min-width:130px}
+  .ro b{display:block;font-size:2rem;font-weight:730;font-variant-numeric:tabular-nums;line-height:1.1}
+  .ro span{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted)}
+  .ro.angle b{color:var(--accent)}
+  .ro.raw b{color:var(--knob)}
+  input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:30px;background:transparent}
+  input[type=range]::-webkit-slider-runnable-track{height:9px;border-radius:5px;background:var(--sunken);border:1px solid var(--line)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:26px;height:26px;border-radius:50%;
+    background:var(--accent);border:3px solid var(--panel);margin-top:-10px}
+  input[type=range]:disabled::-webkit-slider-thumb{background:var(--muted)}
+  label.field{display:block;font-size:10.5px;color:var(--muted);letter-spacing:.1em;text-transform:uppercase}
+  label.field input{width:100%;margin-top:5px;padding:8px 10px;font:inherit;background:var(--sunken);
+                    border:1px solid var(--line);color:var(--ink);border-radius:7px;font-variant-numeric:tabular-nums}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btns{display:flex;flex-wrap:wrap;gap:8px;margin-top:13px}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:9px}
+  #log{margin:0;padding:12px;height:150px;overflow-y:auto;background:var(--sunken);
+       border:1px solid var(--line);border-radius:8px;font:12px/1.65 var(--mono);color:var(--muted);
+       white-space:pre-wrap;word-break:break-word}
+  #log b{color:var(--ink);font-weight:500} #log i{color:var(--bad);font-style:normal}
+  .lede{font-size:1.06rem;color:var(--muted);max-width:66ch;margin:0 0 24px}
+  .steps{display:flex;flex-direction:column;gap:14px}
+  .step{display:grid;grid-template-columns:44px 1fr;gap:16px;background:var(--panel);
+        border:1px solid var(--line);border-radius:13px;padding:19px;box-shadow:var(--shadow)}
+  .step[data-state=done]{border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
+  .step[data-state=doing]{border-color:var(--accent)}
+  .bead{width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:680;
+        background:var(--sunken);color:var(--muted);border:1px solid var(--line)}
+  .step[data-state=done] .bead{background:var(--good);color:#fff;border-color:var(--good)}
+  .step[data-state=doing] .bead{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .stepbody{display:flex;flex-direction:column;gap:11px;min-width:0}
+  .step h3{margin:0;font-size:1.1rem;font-weight:640}
+  .step p{margin:0;max-width:68ch} .step p.hint{color:var(--muted);font-size:.94rem}
+  .verdict{display:inline-flex;align-items:center;gap:9px;align-self:flex-start;padding:8px 14px;
+           border-radius:9px;font-size:.94rem;font-weight:550;background:var(--sunken);border:1px solid var(--line)}
+  .verdict.good{color:var(--good)} .verdict.bad{color:var(--bad)} .verdict.wait{color:var(--warn)}
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:.92rem}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:650}
+  tr:last-child td{border-bottom:none}
+  td.pin{font-family:var(--mono);font-weight:600;white-space:nowrap}
+  table.wiring td{border-bottom:none;padding:6px 14px}
+  table.wiring tr.grp td{border-top:1px solid var(--line);padding-top:11px}
+  table.wiring tr.grp:first-child td{border-top:none}
+  table.wiring td.part{font-weight:620;white-space:nowrap;border-right:1px solid var(--line)}
+  .picks{display:flex;flex-direction:column;gap:8px}
+  .pick{display:flex;gap:12px;align-items:flex-start;cursor:pointer;border:1px solid var(--line);
+        border-radius:10px;padding:12px 15px;background:var(--sunken)}
+  .pick:has(input:checked){border-color:var(--accent)}
+  .pick b{display:block;font-weight:620} .pick span{color:var(--muted);font-size:.92rem}
+  #flashlog{margin:0;padding:12px 14px;max-height:220px;overflow-y:auto;background:var(--sunken);
+            border:1px solid var(--line);border-radius:9px;font:12.5px/1.6 var(--mono);color:var(--muted);
+            white-space:pre-wrap;word-break:break-word}
+  #flashlog b{color:var(--ink);font-weight:600} #flashlog i{color:var(--bad);font-style:normal;font-weight:600}
+  #flashlog u{color:var(--good);text-decoration:none;font-weight:600}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>Knob &amp; Servo</h1>
+    <div class="grow"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-live"  role="tab" aria-selected="true">Live</button>
+    <button class="tab" id="tab-setup" role="tab" aria-selected="false">Set it up</button>
+  </div>
+
+  <section id="view-live">
+    <div class="cols">
+      <div class="stack">
+        <section class="panel">
+          <h2>Servo</h2>
+          <div class="dialwrap">
+            <div class="dial">
+              <svg viewBox="0 0 220 130" role="img" aria-label="Servo angle dial">
+                <path d="M20 115 A 90 90 0 0 1 200 115" fill="none"
+                      stroke="var(--sunken)" stroke-width="16" stroke-linecap="round"/>
+                <path id="arc" d="M20 115 A 90 90 0 0 1 200 115" fill="none"
+                      stroke="var(--accent)" stroke-width="16" stroke-linecap="round"
+                      stroke-dasharray="283" stroke-dashoffset="283"/>
+                <line id="needle" x1="110" y1="115" x2="110" y2="40"
+                      stroke="var(--ink)" stroke-width="3.5" stroke-linecap="round"/>
+                <circle cx="110" cy="115" r="7" fill="var(--ink)"/>
+                <text x="20" y="128" font-size="10" fill="var(--muted)"
+                      font-family="ui-sans-serif,system-ui">0°</text>
+                <text x="188" y="128" font-size="10" fill="var(--muted)"
+                      font-family="ui-sans-serif,system-ui">180°</text>
+              </svg>
+            </div>
+            <div class="readouts">
+              <div class="ro angle"><b id="n-angle">—</b><span>Servo angle</span></div>
+              <div class="ro raw"><b id="n-raw">—</b><span>Knob reading</span></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Who's driving</h2>
+          <div class="btns" style="margin-top:0">
+            <button id="m-knob">The knob</button>
+            <button id="m-web">This page</button>
+          </div>
+          <div style="margin-top:14px">
+            <input type="range" id="webangle" min="0" max="180" value="90" disabled>
+            <div class="sub" id="webhint">Switch to “This page” to use the slider.</div>
+          </div>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel">
+          <h2>Calibration</h2>
+          <div class="grid2">
+            <label class="field">Knob min <input type="number" id="c-rawmin" min="0" max="1023"></label>
+            <label class="field">Knob max <input type="number" id="c-rawmax" min="0" max="1023"></label>
+            <label class="field">Angle min <input type="number" id="c-low"  min="0" max="180"></label>
+            <label class="field">Angle max <input type="number" id="c-high" min="0" max="180"></label>
+          </div>
+          <div class="btns">
+            <button class="sm" id="grabmin">Set min from knob</button>
+            <button class="sm" id="grabmax">Set max from knob</button>
+          </div>
+          <div class="btns">
+            <button class="sm" id="invert">Reverse: Off</button>
+            <button class="sm" id="save">Remember</button>
+            <button class="sm" id="reset">Defaults</button>
+          </div>
+          <div class="sub">
+            Turn the knob fully one way and press “Set min from knob”, then fully the other
+            way for max. Cheap knobs rarely reach the true ends on their own.
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Messages from the board</h2>
+          <pre id="log"></pre>
+        </section>
+      </div>
+    </div>
+  </section>
+
+  <section id="view-setup" hidden>
+    <p class="lede">
+      Turn a knob, and a servo turns with it. The simplest possible thing that reads the
+      real world and moves something — and a good one to get right first.
+    </p>
+    <div class="steps">
+      <div class="step" id="s1" data-state="todo">
+        <div class="bead">1</div>
+        <div class="stepbody">
+          <h3>Plug the Arduino into your computer</h3>
+          <p>This project uses the Mega 2560. Its light should come on.</p>
+          <div class="verdict" id="v1">Looking for your board…</div>
+        </div>
+      </div>
+      <div class="step" id="s2" data-state="todo">
+        <div class="bead">2</div>
+        <div class="stepbody">
+          <h3>Connect the parts</h3>
+          <p>Five wires. The knob has three legs and the servo has three.</p>
+          <div class="tablewrap">
+            <table class="wiring">
+              <thead><tr><th>Part</th><th>Leg</th><th>Goes to</th><th>Why</th></tr></thead>
+              <tbody>
+                <tr class="grp">
+                  <td class="part" rowspan="3">Knob<br><span style="font-size:11px;color:var(--muted);font-weight:400">potentiometer</span></td>
+                  <td class="pin">one outer leg</td><td class="pin">5V</td><td rowspan="3">Turning it changes the voltage on the middle leg</td></tr>
+                <tr><td class="pin">middle leg</td><td class="pin">A0</td></tr>
+                <tr><td class="pin">other outer leg</td><td class="pin">GND</td></tr>
+                <tr class="grp">
+                  <td class="part" rowspan="3">Servo</td>
+                  <td class="pin">orange (signal)</td><td class="pin">9</td><td rowspan="3">Moves to match the knob</td></tr>
+                <tr><td class="pin">red</td><td class="pin">5V</td></tr>
+                <tr><td class="pin">brown</td><td class="pin">GND</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="hint">
+            It does not matter which outer leg of the knob goes to 5V — swapping them just
+            reverses which way it turns, and there's a <b>Reverse</b> button for that anyway.
+          </p>
+          <p class="hint">
+            One small servo can run from the Arduino's own 5V. If you add more, or it stutters
+            under load, give the servos their own 5V supply and join the grounds.
+          </p>
+        </div>
+      </div>
+      <div class="step" id="s3" data-state="todo">
+        <div class="bead">3</div>
+        <div class="stepbody">
+          <h3>Send the code to the Arduino</h3>
+          <div class="picks" id="picks"></div>
+          <div><button class="primary big" id="flash">Send it to my Arduino</button></div>
+          <pre id="flashlog" hidden></pre>
+          <div class="verdict" id="v3" hidden></div>
+        </div>
+      </div>
+      <div class="step" id="s4" data-state="todo">
+        <div class="bead">4</div>
+        <div class="stepbody">
+          <h3>Turn the knob</h3>
+          <p>The servo should follow immediately. Open the Live tab to watch the numbers.</p>
+          <div class="verdict" id="v4">Send the code first.</div>
+          <p class="hint">
+            Servo jittering when you're not touching the knob? That's normal electrical noise
+            and the code already ignores small changes. If it's bad, the knob's middle leg
+            may not be making solid contact.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let cfg={rawmin:0,rawmax:1023,low:0,high:180,invert:'0',mode:'KNOB'};
+let health='offline', flashing=false, editing=null, userPickedTab=false;
+let lastRaw=0, lastAngle=90, dragging=false;
+
+async function send(cmd){
+  try{
+    const r=await fetch('/cmd',{method:'POST',headers:{'Content-Type':'application/json'},
+                                body:JSON.stringify({cmd})});
+    if(!r.ok) addLog('# the board is not connected right now', true);
+  }catch{ addLog('# could not reach the dashboard', true); }
+}
+function addLog(line,err){
+  const el=$('log'); const near=el.scrollTop+el.clientHeight>=el.scrollHeight-30;
+  const tag=err||line.startsWith('ERR')?'i':line.startsWith('OK')?'b':'span';
+  const s=document.createElement(tag); s.textContent=line+'\n'; el.appendChild(s);
+  while(el.childNodes.length>200) el.removeChild(el.firstChild);
+  if(near) el.scrollTop=el.scrollHeight;
+}
+function showTab(w){
+  const live=w==='live';
+  $('tab-live').setAttribute('aria-selected',live);
+  $('tab-setup').setAttribute('aria-selected',!live);
+  $('view-live').hidden=!live; $('view-setup').hidden=live;
+}
+$('tab-live').onclick=()=>{userPickedTab=true;showTab('live')};
+$('tab-setup').onclick=()=>{userPickedTab=true;showTab('setup')};
+
+function renderDial(a,raw){
+  lastAngle=a; lastRaw=raw;
+  $('n-angle').textContent=a+'°';
+  $('n-raw').textContent=raw;
+  const frac=Math.max(0,Math.min(1,a/180));
+  $('arc').style.strokeDashoffset = 283*(1-frac);
+  const rad=Math.PI*(1-frac);
+  $('needle').setAttribute('x2',(110+75*Math.cos(rad)).toFixed(1));
+  $('needle').setAttribute('y2',(115-75*Math.sin(rad)).toFixed(1));
+  if(!dragging && cfg.mode==='WEB') $('webangle').value=a;
+}
+
+function renderConfig(){
+  const set=(id,v)=>{ if(editing!==id) $(id).value=v; };
+  set('c-rawmin',cfg.rawmin); set('c-rawmax',cfg.rawmax);
+  set('c-low',cfg.low); set('c-high',cfg.high);
+  const inv=cfg.invert==='1';
+  $('invert').textContent='Reverse: '+(inv?'On':'Off');
+  $('invert').classList.toggle('active',inv);
+  const web=cfg.mode==='WEB';
+  $('m-knob').classList.toggle('active',!web);
+  $('m-web').classList.toggle('active',web);
+  $('webangle').disabled=!web;
+  $('webhint').textContent = web ? 'Drag to move the servo. The knob is ignored.'
+                                 : 'Switch to “This page” to use the slider.';
+  renderSetup();
+}
+
+function setStep(id,s){$(id).dataset.state=s}
+function verdict(id,cls,text){const e=$(id);e.hidden=false;e.className='verdict '+cls;e.textContent=text}
+function renderSetup(){
+  if(health==='offline'){ setStep('s1','doing'); verdict('v1','bad',"I can't find the board. Is the USB cable plugged in?"); }
+  else { setStep('s1','done'); verdict('v1','good','Found your Arduino.'); }
+  setStep('s2', health==='ok'?'done':(health==='offline'?'todo':'doing'));
+  if(flashing) setStep('s3','doing');
+  else if(health==='ok'){ setStep('s3','done'); verdict('v3','good','The Arduino is running the right code.'); }
+  else if(health==='silent'){ setStep('s3','doing'); verdict('v3','wait','Plugged in but not talking yet — send it the code.'); }
+  else { setStep('s3','todo'); $('v3').hidden=true; }
+  $('flash').disabled = flashing || health==='offline';
+  if(health!=='ok'){ setStep('s4','todo'); verdict('v4','wait','Send the code first.'); }
+  else { setStep('s4','done'); verdict('v4','good','Working. Servo at '+lastAngle+'°.'); }
+}
+
+async function loadSketches(){
+  const d=await (await fetch('/api/sketches')).json();
+  $('picks').innerHTML=d.sketches.map(s=>`
+    <label class="pick"><input type="radio" name="sketch" value="${s.name}" ${s.needed?'checked':''}>
+    <span><b>${s.title}</b><span>${s.blurb}</span></span></label>`).join('');
+}
+function flashLine(kind,line){
+  const el=$('flashlog'); el.hidden=false;
+  const tag=kind==='error'?'i':kind==='ok'?'u':kind==='step'?'b':'span';
+  const n=document.createElement(tag); n.textContent=line+'\n'; el.appendChild(n);
+  el.scrollTop=el.scrollHeight;
+}
+$('flash').onclick=async()=>{
+  const p=document.querySelector('input[name=sketch]:checked'); if(!p) return;
+  flashing=true; $('flashlog').textContent=''; $('flashlog').hidden=false; $('v3').hidden=true;
+  $('flash').textContent='Sending…'; renderSetup();
+  const r=await fetch('/api/flash',{method:'POST',headers:{'Content-Type':'application/json'},
+                                    body:JSON.stringify({sketch:p.value})});
+  if(!r.ok){ flashing=false; $('flash').textContent='Send it to my Arduino'; renderSetup(); }
+};
+
+const es=new EventSource('/stream');
+es.onmessage=e=>{
+  const m=JSON.parse(e.data);
+  if(m.type==='snapshot'){
+    setConn(m.connected,m.health);
+    if(m.config&&Object.keys(m.config).length) applyCfg(m.config);
+    $('log').textContent=''; (m.log||[]).forEach(l=>addLog(l));
+    const h=m.history||[]; const last=h[h.length-1];
+    if(last) renderDial(last.a,last.raw);
+    if(!userPickedTab) showTab(m.health==='ok'?'live':'setup');
+  } else if(m.type==='telemetry'){
+    renderDial(m.a,m.raw);
+    if(cfg.mode!==m.mode){ cfg.mode=m.mode; renderConfig(); }
+    if(health!=='ok'){ health='ok'; setConn(true,'ok'); }
+  } else if(m.type==='config'){ applyCfg(m.config); }
+  else if(m.type==='status'){ setConn(m.connected,m.health); }
+  else if(m.type==='flash'){
+    if(m.kind==='done'){ flashing=false; $('flash').textContent='Send it to my Arduino'; }
+    else if(m.line) flashLine(m.kind,m.line);
+    renderSetup();
+  } else if(m.type==='log'){ addLog(m.line); }
+};
+es.onerror=()=>setConn(false,'offline');
+
+function applyCfg(c){
+  for(const k of ['rawmin','rawmax','low','high']) if(c[k]!==undefined) cfg[k]=parseInt(c[k],10);
+  if(c.invert!==undefined) cfg.invert=c.invert;
+  if(c.mode!==undefined)   cfg.mode=c.mode;
+  renderConfig();
+}
+function setConn(ok,h){
+  health = h || (ok?'silent':'offline');
+  const d=$('dot');
+  d.classList.toggle('ok',health==='ok');
+  d.classList.toggle('warn',health==='silent'||health==='busy');
+  $('conn').textContent = health==='ok'?'connected'
+    : health==='silent'?'plugged in, no code yet'
+    : health==='busy'?'sending code…':'no board found';
+  renderSetup();
+}
+
+for(const [id,key] of [['c-rawmin','MIN'],['c-rawmax','MAX'],['c-low','LOW'],['c-high','HIGH']]){
+  const el=$(id);
+  el.addEventListener('focus',()=>editing=id);
+  el.addEventListener('blur',()=>editing=null);
+  el.addEventListener('change',()=>send(`SET ${key} ${parseInt(el.value,10)}`));
+}
+$('grabmin').onclick=()=>send(`SET MIN ${lastRaw}`);
+$('grabmax').onclick=()=>send(`SET MAX ${lastRaw}`);
+$('invert').onclick =()=>send('INVERT '+(cfg.invert==='1'?'OFF':'ON'));
+$('save').onclick   =()=>send('SAVE');
+$('reset').onclick  =()=>send('RESET');
+$('m-knob').onclick =()=>send('MODE KNOB');
+$('m-web').onclick  =()=>send('MODE WEB');
+
+const wa=$('webangle');
+wa.addEventListener('pointerdown',()=>dragging=true);
+wa.addEventListener('pointerup',()=>dragging=false);
+wa.addEventListener('input',()=>{ if(cfg.mode==='WEB') send('ANGLE '+wa.value); });
+
+loadSketches(); renderConfig(); renderSetup();
+</script>
+</body>
+</html>

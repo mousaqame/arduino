@@ -1,0 +1,886 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Build the Robot</title>
+<style>
+  :root{
+    --ground:#f3f6f6; --panel:#fff; --sunken:#e9efee; --ink:#101a1c;
+    --muted:#56696b; --line:#d5dedd; --accent:#0e7c72;
+    --good:#16a34a; --warn:#d97706; --stop:#dc2626;
+    --sig:#ea7317; --pos:#dc2626; --neg:#334155;
+    --shadow:0 1px 2px rgba(16,26,28,.05), 0 8px 24px rgba(16,26,28,.06);
+    --mono: ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ground:#0a1013; --panel:#111a1c; --sunken:#0d1517; --ink:#dfe9e9;
+      --muted:#8a9c9e; --line:#1e2c2f; --accent:#2dd4bf;
+      --good:#22c55e; --warn:#f59e0b; --stop:#ef4444;
+      --sig:#fb923c; --pos:#f87171; --neg:#94a3b8;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0;background:var(--ground);color:var(--ink);
+    font:15.5px/1.65 ui-sans-serif,system-ui,"Segoe UI",sans-serif;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:900px;margin:0 auto;padding:0 20px 72px}
+  header{display:flex;align-items:center;gap:14px;padding:26px 0 6px;flex-wrap:wrap}
+  header h1{margin:0;font-size:1.3rem;font-weight:670;letter-spacing:-.02em}
+  .grow{flex:1}
+  .status{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--stop)}
+  .dot.ok{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 20%,transparent)}
+  .lede{font-size:1.06rem;color:var(--muted);max-width:66ch;margin:10px 0 26px}
+
+  .steps{display:flex;flex-direction:column;gap:14px}
+  .step{
+    display:grid;grid-template-columns:44px 1fr;gap:16px;
+    background:var(--panel);border:1px solid var(--line);border-radius:13px;
+    padding:19px;box-shadow:var(--shadow);
+  }
+  .step[data-state=done]{border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
+  .step[data-state=doing]{border-color:var(--accent)}
+  .bead{
+    width:34px;height:34px;border-radius:50%;display:grid;place-items:center;
+    font-weight:680;background:var(--sunken);color:var(--muted);border:1px solid var(--line);
+  }
+  .step[data-state=done] .bead{background:var(--good);color:#fff;border-color:var(--good)}
+  .step[data-state=doing] .bead{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .stepbody{display:flex;flex-direction:column;gap:11px;min-width:0}
+  .step h3{margin:0;font-size:1.1rem;font-weight:640;letter-spacing:-.01em}
+  .step p{margin:0;max-width:68ch}
+  .step p.hint{color:var(--muted);font-size:.94rem}
+
+  .verdict{
+    display:inline-flex;align-items:center;gap:9px;align-self:flex-start;
+    padding:8px 14px;border-radius:9px;font-size:.94rem;font-weight:550;
+    background:var(--sunken);border:1px solid var(--line);
+  }
+  .verdict.good{color:var(--good);border-color:color-mix(in srgb,var(--good) 45%,var(--line))}
+  .verdict.bad{color:var(--stop);border-color:color-mix(in srgb,var(--stop) 45%,var(--line))}
+  .verdict.wait{color:var(--warn);border-color:color-mix(in srgb,var(--warn) 45%,var(--line))}
+
+  h4{margin:8px 0 0;font-size:11px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:660}
+
+  figure{margin:0;display:flex;flex-direction:column;gap:9px}
+  .diagram{background:var(--sunken);border:1px solid var(--line);border-radius:11px}
+  .diagram svg{width:100%;height:auto;display:block}
+  figcaption{font-size:.9rem;color:var(--muted)}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px}
+  table{border-collapse:collapse;width:100%;font-size:.92rem}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:650}
+  tr:last-child td{border-bottom:none}
+  td.pin{font-family:var(--mono);font-weight:600;white-space:nowrap}
+  .swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:8px}
+
+  .seg{display:flex;gap:6px;background:var(--sunken);border:1px solid var(--line);
+       border-radius:10px;padding:4px;align-self:flex-start;flex-wrap:wrap}
+  .seg button{border:1px solid transparent;background:none;border-radius:7px;padding:8px 16px;color:var(--muted)}
+  .seg button[aria-pressed=true]{background:var(--panel);border-color:var(--line);color:var(--accent);font-weight:640}
+
+  .good-note{
+    display:flex;flex-direction:column;gap:6px;
+    background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--good);border-radius:0 10px 10px 0;padding:14px 17px;
+  }
+  .good-note b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--good);font-weight:660}
+  .good-note p{font-size:.945rem}
+
+  .danger{
+    display:flex;flex-direction:column;gap:6px;
+    background:var(--panel);border:1px solid var(--line);
+    border-left:3px solid var(--stop);border-radius:0 10px 10px 0;padding:14px 17px;
+  }
+  .danger b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--stop);font-weight:660}
+  .danger p{font-size:.945rem}
+
+  button{
+    font:inherit;font-weight:550;cursor:pointer;border-radius:8px;
+    border:1px solid var(--line);background:var(--panel);color:var(--ink);padding:8px 15px;
+  }
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+  @media (prefers-color-scheme: dark){button.primary{color:#06302b}}
+  button.big{padding:12px 22px;font-size:1.02rem;font-weight:620}
+  button:disabled{opacity:.45;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+  #flashlog{
+    margin:0;padding:12px 14px;max-height:230px;overflow-y:auto;
+    background:var(--sunken);border:1px solid var(--line);border-radius:9px;
+    font:12.5px/1.6 var(--mono);color:var(--muted);white-space:pre-wrap;word-break:break-word;
+  }
+  #flashlog b{color:var(--ink);font-weight:600}
+  #flashlog i{color:var(--stop);font-style:normal;font-weight:600}
+  #flashlog u{color:var(--good);text-decoration:none;font-weight:600}
+  #flashlog s{color:var(--warn);text-decoration:none;font-weight:600}
+
+  .tabs{display:flex;gap:4px;margin:14px 0 22px;border-bottom:1px solid var(--line)}
+  .tab{font:inherit;font-weight:560;cursor:pointer;background:none;border:none;color:var(--muted);
+       padding:10px 16px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+
+  .mic-wrap{display:flex;align-items:center;gap:22px;flex-wrap:wrap;
+            background:var(--panel);border:1px solid var(--line);border-radius:14px;
+            padding:22px;box-shadow:var(--shadow)}
+  .mic{width:86px;height:86px;border-radius:50%;flex:none;display:grid;place-items:center;
+       border:2px solid var(--line);background:var(--sunken);color:var(--muted);cursor:pointer;
+       transition:transform .12s, background .12s, color .12s, border-color .12s}
+  .mic:hover{border-color:var(--accent);color:var(--accent)}
+  .mic[data-on=true]{background:var(--stop);border-color:var(--stop);color:#fff;
+                     animation:listen 1.1s ease-in-out infinite}
+  @keyframes listen{0%,100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--stop) 45%,transparent)}
+                    50%{box-shadow:0 0 0 14px transparent}}
+  @media (prefers-reduced-motion: reduce){.mic[data-on=true]{animation:none}}
+  .mic:disabled{opacity:.4;cursor:not-allowed}
+  .mic-side{min-width:0;flex:1}
+  .heard{font-size:1.15rem;font-weight:600;min-height:1.6em}
+  .heard.dim{color:var(--muted);font-weight:400;font-size:1rem}
+  .did{margin-top:6px;font-size:.95rem;color:var(--accent);font-weight:560;min-height:1.4em}
+  .did.miss{color:var(--warn)}
+
+  .panelish{display:flex;flex-direction:column;gap:6px;background:var(--panel);
+            border:1px solid var(--line);border-left:3px solid var(--warn);
+            border-radius:0 10px 10px 0;padding:14px 17px;margin-top:14px}
+  .panelish b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--warn);font-weight:660}
+  .panelish p{font-size:.945rem;margin:0}
+
+  .movegrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(132px,1fr));gap:9px}
+  .mv{padding:14px 10px;font-weight:600;border-radius:11px}
+  .mv.danger{color:var(--stop);border-color:color-mix(in srgb,var(--stop) 40%,var(--line))}
+
+  a.golink{
+    display:inline-block;background:var(--accent);color:#fff;text-decoration:none;
+    padding:12px 22px;border-radius:9px;font-weight:620;font-size:1.02rem;
+  }
+  @media (prefers-color-scheme: dark){a.golink{color:#06302b}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Build the Robot</h1>
+    <div class="grow"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="conn">looking…</span></div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-build"   role="tab" aria-selected="true">Build it</button>
+    <button class="tab" id="tab-control" role="tab" aria-selected="false">Talk to it</button>
+  </div>
+
+  <section id="view-control" hidden>
+    <p class="lede">
+      Press the microphone and tell the robot what to do — “dance”, “wave”, “move your head
+      left”, “raise your right arm”.
+    </p>
+
+    <div class="mic-wrap">
+      <button id="mic" class="mic" aria-label="Hold to speak">
+        <svg viewBox="0 0 24 24" width="34" height="34" aria-hidden="true">
+          <path fill="currentColor" d="M12 14a3 3 0 0 0 3-3V5a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3z"/>
+          <path fill="currentColor" d="M19 11a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21a1 1 0 1 0 2 0v-3.08A7 7 0 0 0 19 11z"/>
+        </svg>
+      </button>
+      <div class="mic-side">
+        <div class="heard" id="heard">Press the microphone and say something.</div>
+        <div class="did" id="did"></div>
+      </div>
+    </div>
+
+    <div class="panelish" id="voice-unsupported" hidden>
+      <b>This browser can't listen</b>
+      <p>
+        Speech recognition needs Chrome or Edge, and the page has to be opened at
+        <b>http://127.0.0.1:8788</b> — browsers only allow the microphone on a secure
+        address, and localhost counts as one. Opening this page by its network address
+        from a phone will not work. The buttons below still do.
+      </p>
+    </div>
+
+    <h4 style="margin-top:22px">Or just press a button</h4>
+    <div class="movegrid" id="moves"></div>
+    <div class="movegrid" style="margin-top:9px">
+      <button class="mv danger" data-relay="/api/stop">Stop</button>
+      <button class="mv" data-relay="/api/relax">Relax motors</button>
+    </div>
+
+    <p class="hint" id="robotwhere" style="margin-top:18px"></p>
+
+    <details style="margin-top:14px">
+      <summary style="cursor:pointer;color:var(--muted);font-size:.93rem">Things you can say</summary>
+      <div class="tablewrap" style="margin-top:10px">
+        <table>
+          <thead><tr><th>Say</th><th>It does</th></tr></thead>
+          <tbody id="phrasebook"></tbody>
+        </table>
+      </div>
+    </details>
+  </section>
+
+  <section id="view-build">
+  <p class="lede">
+    A robot with four motors — one for the body, one for the head, and one for each arm.
+    Wire it up, send it the code, then drive it from your phone.
+  </p>
+
+  <div class="steps">
+
+    <!-- 1 -->
+    <div class="step" id="s1" data-state="todo">
+      <div class="bead">1</div>
+      <div class="stepbody">
+        <h3>Plug the NodeMCU into your computer</h3>
+        <p>Use its micro-USB cable. A small light on the board should come on.</p>
+        <div class="verdict" id="v1">Looking for your board…</div>
+        <p class="hint">
+          Nothing found? The board needs a USB driver — CH340 or CP2102 depending on which
+          chip yours has. It's the small square chip next to the USB socket.
+        </p>
+      </div>
+    </div>
+
+    <!-- 2 -->
+    <div class="step" id="s2" data-state="todo">
+      <div class="bead">2</div>
+      <div class="stepbody">
+        <h3>Wire it up</h3>
+        <p>
+          There are two separate jobs here. The <b>signal</b> wires tell each motor where to
+          move, and the <b>power</b> wires feed them. Doing them one at a time is much easier
+          than trying to do both at once.
+        </p>
+
+        <div class="danger">
+          <b>Do not power the motors from the NodeMCU</b>
+          <p>
+            Four motors pull more current than the NodeMCU can supply. If you connect their
+            red wires to the board, it restarts the moment the robot moves — and it looks
+            like a broken WiFi problem, not a power one. They need their own 5V adapter.
+          </p>
+        </div>
+
+        <h4>Part one — the signal wires</h4>
+        <p>
+          Each motor has three wires. The <b>orange</b> one is the signal. Each goes to its
+          own pin on the NodeMCU.
+        </p>
+
+        <figure>
+          <div class="diagram">
+            <svg viewBox="0 0 660 300" role="img" aria-label="Signal wiring: torso motor orange wire to D1, head motor to D2, left arm to D5, right arm to D6.">
+              <rect x="40" y="45" width="140" height="215" rx="11"
+                    fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
+              <rect x="40" y="45" width="140" height="30" rx="11" fill="var(--accent)" opacity=".14"/>
+              <text x="110" y="65" text-anchor="middle" font-size="13.5" font-weight="650"
+                    fill="var(--ink)" font-family="ui-sans-serif,system-ui">NodeMCU</text>
+              <rect x="20" y="100" width="20" height="30" rx="4" fill="var(--muted)" opacity=".5"/>
+              <text x="30" y="147" text-anchor="middle" font-size="10" fill="var(--muted)"
+                    font-family="ui-sans-serif,system-ui">USB</text>
+
+              <g font-family="var(--mono)" font-size="13" font-weight="650" fill="var(--ink)">
+                <text x="170" y="103" text-anchor="end">D1</text>
+                <text x="170" y="153" text-anchor="end">D2</text>
+                <text x="170" y="203" text-anchor="end">D5</text>
+                <text x="170" y="248" text-anchor="end">D6</text>
+              </g>
+
+              <g fill="none" stroke="var(--sig)" stroke-width="3" stroke-linecap="round">
+                <path d="M180 99  C 280 99, 320 99, 400 99"/>
+                <path d="M180 149 C 280 149, 320 149, 400 149"/>
+                <path d="M180 199 C 280 199, 320 199, 400 199"/>
+                <path d="M180 244 C 280 244, 320 244, 400 244"/>
+              </g>
+
+              <g font-family="ui-sans-serif,system-ui">
+                <rect x="400" y="78" width="225" height="42" rx="9"
+                      fill="var(--panel)" stroke="var(--sig)" stroke-width="1.5"/>
+                <text x="416" y="104" font-size="13.5" font-weight="620" fill="var(--ink)">Torso motor</text>
+
+                <rect x="400" y="128" width="225" height="42" rx="9"
+                      fill="var(--panel)" stroke="var(--sig)" stroke-width="1.5"/>
+                <text x="416" y="154" font-size="13.5" font-weight="620" fill="var(--ink)">Head motor</text>
+
+                <rect x="400" y="178" width="225" height="42" rx="9"
+                      fill="var(--panel)" stroke="var(--sig)" stroke-width="1.5"/>
+                <text x="416" y="204" font-size="13.5" font-weight="620" fill="var(--ink)">Left arm motor</text>
+
+                <rect x="400" y="223" width="225" height="42" rx="9"
+                      fill="var(--panel)" stroke="var(--sig)" stroke-width="1.5"/>
+                <text x="416" y="249" font-size="13.5" font-weight="620" fill="var(--ink)">Right arm motor</text>
+              </g>
+            </svg>
+          </div>
+          <figcaption>Only the orange signal wires are shown here. Power comes next.</figcaption>
+        </figure>
+
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Motor</th><th>Its wire</th><th>NodeMCU pin</th></tr></thead>
+            <tbody>
+              <tr><td><span class="swatch" style="background:var(--sig)"></span>Torso</td><td class="pin">orange (signal)</td><td class="pin">D1</td></tr>
+              <tr><td><span class="swatch" style="background:var(--sig)"></span>Head</td><td class="pin">orange (signal)</td><td class="pin">D2</td></tr>
+              <tr><td><span class="swatch" style="background:var(--sig)"></span>Left arm</td><td class="pin">orange (signal)</td><td class="pin">D5</td></tr>
+              <tr><td><span class="swatch" style="background:var(--sig)"></span>Right arm</td><td class="pin">orange (signal)</td><td class="pin">D6</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="hint">
+          These four pins were chosen on purpose. Most other pins on the NodeMCU have to be
+          at a certain voltage while the board starts up, and a connected motor pulls them
+          the wrong way — so the board won't switch on at all.
+        </p>
+
+        <h4>Part two — the power wires</h4>
+        <p>
+          The other two wires on every motor are power. Build two rows on your breadboard: a
+          <b>5V row</b> and a <b>GND row</b>. Everything connects to those.
+        </p>
+
+        <div class="seg" role="group" aria-label="Choose a power source">
+          <button id="tab-adapter" aria-pressed="true">Wall adapter</button>
+          <button id="tab-battery" aria-pressed="false">AA batteries</button>
+        </div>
+
+        <div id="src-adapter">
+          <p>
+            A 5V adapter with the cable cut back to bare wires. Steady and never runs out,
+            but the robot stays near a socket. <b>The amps matter more than the volts.</b>
+          </p>
+          <div class="tablewrap" style="margin-top:11px">
+            <table>
+              <thead><tr><th>Adapter</th><th>Verdict</th></tr></thead>
+              <tbody>
+                <tr><td class="pin">5V 3A</td><td>Plenty. Everything can move at once.</td></tr>
+                <tr><td class="pin">5V 2A</td><td>Good. Add the capacitor if you have one.</td></tr>
+                <tr><td class="pin">5V 1A</td><td>Tight. Use low-power mode.</td></tr>
+                <tr><td class="pin">5V 0.7A</td><td>Too small for four motors together — low-power mode only.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <div class="danger" style="margin-top:11px">
+            <b>Under about 1.5 amps? Switch on low-power mode</b>
+            <p>
+              One MG90S motor pulls around 0.7&nbsp;A on its own when it's straining, and four
+              moving together want 1.2–1.6&nbsp;A. A smaller supply can't feed them all at once —
+              they'll jitter, stall, or just stop.
+            </p>
+            <p>
+              The robot has a <b>Low-power mode</b> button on its control page for exactly this.
+              The motors take turns instead of moving together, they move a little slower, and
+              they let go once everything has settled. Moves look less lively but they work
+              properly, and nothing gets damaged.
+            </p>
+          </div>
+          <p class="hint" style="margin-top:11px">
+            Most phone chargers made in the last few years do 2&nbsp;A or more — check the small
+            print on the plug. A USB power bank is usually 2&nbsp;A too, and makes the robot
+            portable at the same time.
+          </p>
+
+          <div class="danger" style="margin-top:11px">
+            <b>Using a power bank? It may switch itself off</b>
+            <p>
+              Power banks are built to stop draining once a phone finishes charging, so most
+              shut down when they see less than about 100&nbsp;mA for a while. A robot sitting
+              still can easily draw less than that — so it works perfectly, you leave it
+              alone for a minute, and the motors go dead.
+            </p>
+            <p>
+              If that happens: many banks have a <b>low-current</b> or <b>always-on</b> mode,
+              usually a quick double-press of the button — check the manual. Otherwise just
+              avoid leaving it idle, and be aware that low-power mode makes this <em>more</em>
+              likely, because it releases the motors after a few seconds and the draw drops
+              to almost nothing.
+            </p>
+          </div>
+
+          <p class="hint" style="margin-top:11px">
+            <b>Two USB sockets on the bank?</b> Run the motors from one and the NodeMCU's own
+            cable from the other, and the robot is completely wireless. Both sockets already
+            share a ground inside the bank, so that part is taken care of — but check whether
+            the 2&nbsp;A is per socket or shared between them.
+          </p>
+        </div>
+
+        <div id="src-battery" hidden>
+          <div class="good-note">
+            <b>Use rechargeable NiMH, not alkaline</b>
+            <p>
+              <b>4 × AA NiMH rechargeables</b> (Eneloop and similar) give 4.8V, right in the
+              middle of what these motors want. Just as importantly they can deliver current
+              in big gulps without their voltage collapsing — which is exactly what starting
+              a motor demands.
+            </p>
+          </div>
+          <p style="margin-top:11px">
+            Ordinary alkaline AAs <em>look</em> better on paper — 4 of them give 6V and they
+            hold more charge. In this robot they disappoint. Alkalines have high internal
+            resistance, so the moment four motors pull current the pack's voltage drops like a
+            stone, and the robot stutters or resets. They also empty far faster than their
+            rating suggests when drained hard. They will work for a short while if it's all
+            you have; they are not the thing to build around.
+          </p>
+
+          <div class="tablewrap" style="margin-top:11px">
+            <table>
+              <thead><tr><th>Pack</th><th>Voltage</th><th>Verdict</th></tr></thead>
+              <tbody>
+                <tr><td class="pin">4 × AA NiMH</td><td class="pin">4.8 V</td>
+                    <td>Best choice. Roughly 2–4 hours of play, then recharge.</td></tr>
+                <tr><td class="pin">4 × AA alkaline</td><td class="pin">6.0 V</td>
+                    <td>Works briefly. Sags under load and empties quickly.</td></tr>
+                <tr><td class="pin">9V block</td><td class="pin">9 V</td>
+                    <td><b>No.</b> Too much voltage, and it can't supply nearly enough current.</td></tr>
+              </tbody>
+            </table>
+          </div>
+
+          <div class="danger" style="margin-top:11px">
+            <b>The NodeMCU keeps its own power</b>
+            <p>
+              Don't run the NodeMCU from the battery pack. When the motors pull hard the pack
+              dips, and the NodeMCU restarts — the exact fault we're avoiding. Leave it on its
+              USB cable. For a robot that roams free, plug that cable into a small USB power
+              bank. Two supplies, one shared GND row.
+            </p>
+          </div>
+
+          <p class="hint" style="margin-top:11px">
+            Get a 4-cell AA holder with a switch — it saves unplugging things constantly.
+            Never mix old and new cells, or different brands, in the same pack. The 1000&nbsp;µF
+            capacitor matters more with batteries than with an adapter, not less.
+          </p>
+        </div>
+
+        <figure>
+          <div class="diagram">
+            <svg viewBox="0 0 660 320" role="img" aria-label="Power wiring: 5V adapter plus to the 5V rail, minus to the GND rail. All servo red wires to 5V, brown wires to GND. A 1000 microfarad capacitor across both rails. The NodeMCU GND pin must also connect to the GND rail.">
+              <!-- adapter -->
+              <rect x="28" y="128" width="112" height="64" rx="9"
+                    fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
+              <text id="svg-src" x="84" y="153" text-anchor="middle" font-size="12.5" font-weight="640"
+                    fill="var(--ink)" font-family="ui-sans-serif,system-ui">5V adapter</text>
+              <text id="svg-srcsub" x="84" y="171" text-anchor="middle" font-size="11" fill="var(--muted)"
+                    font-family="ui-sans-serif,system-ui">2 amps or more</text>
+
+              <!-- rails -->
+              <g stroke-width="3.5" stroke-linecap="round" fill="none">
+                <path d="M140 145 C 175 145, 180 96, 215 96" stroke="var(--pos)"/>
+                <path d="M215 96 L 625 96" stroke="var(--pos)"/>
+                <path d="M140 175 C 175 175, 180 232, 215 232" stroke="var(--neg)"/>
+                <path d="M215 232 L 625 232" stroke="var(--neg)"/>
+              </g>
+              <text x="220" y="86" font-size="11.5" font-weight="640" fill="var(--pos)"
+                    font-family="ui-sans-serif,system-ui">5V row</text>
+              <text x="220" y="250" font-size="11.5" font-weight="640" fill="var(--neg)"
+                    font-family="ui-sans-serif,system-ui">GND row</text>
+
+              <!-- capacitor across the rails -->
+              <g stroke="var(--muted)" stroke-width="2" fill="none">
+                <path d="M300 96 L 300 148"/>
+                <path d="M300 180 L 300 232"/>
+              </g>
+              <rect x="284" y="150" width="32" height="4" fill="var(--muted)"/>
+              <rect x="284" y="174" width="32" height="4" fill="var(--muted)"/>
+              <text x="326" y="158" font-size="11.5" font-weight="620" fill="var(--ink)"
+                    font-family="ui-sans-serif,system-ui">1000 µF</text>
+              <text x="326" y="174" font-size="10.5" fill="var(--muted)"
+                    font-family="ui-sans-serif,system-ui">striped leg to GND</text>
+
+              <!-- servos tapping both rails -->
+              <rect x="452" y="122" width="173" height="84" rx="9"
+                    fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
+              <text x="538" y="146" text-anchor="middle" font-size="12.5" font-weight="640"
+                    fill="var(--ink)" font-family="ui-sans-serif,system-ui">all four motors</text>
+              <text x="538" y="167" text-anchor="middle" font-size="11" fill="var(--pos)"
+                    font-family="ui-sans-serif,system-ui">red wire → 5V row</text>
+              <text x="538" y="185" text-anchor="middle" font-size="11" fill="var(--neg)"
+                    font-family="ui-sans-serif,system-ui">brown wire → GND row</text>
+              <g stroke-width="2.5" fill="none">
+                <path d="M500 122 L 500 96" stroke="var(--pos)"/>
+                <path d="M578 206 L 578 232" stroke="var(--neg)"/>
+              </g>
+
+              <!-- the wire people forget -->
+              <rect x="28" y="252" width="150" height="48" rx="9"
+                    fill="var(--panel)" stroke="var(--accent)" stroke-width="2"/>
+              <text x="103" y="272" text-anchor="middle" font-size="12.5" font-weight="640"
+                    fill="var(--ink)" font-family="ui-sans-serif,system-ui">NodeMCU GND pin</text>
+              <text x="103" y="290" text-anchor="middle" font-size="10.5" fill="var(--accent)"
+                    font-family="ui-sans-serif,system-ui">don't skip this one</text>
+              <path d="M103 252 L 103 232" stroke="var(--accent)" stroke-width="3" fill="none"/>
+              <circle cx="103" cy="232" r="4.5" fill="var(--accent)"/>
+            </svg>
+          </div>
+          <figcaption>
+            The NodeMCU is powered by its own USB cable — it does not take power from this
+            adapter. Only its <b>GND</b> pin joins in.
+          </figcaption>
+        </figure>
+
+        <div class="tablewrap">
+          <table>
+            <thead><tr><th>Connect this</th><th>To this</th></tr></thead>
+            <tbody>
+              <tr><td>Red wire of all four motors</td><td class="pin">5V row</td></tr>
+              <tr><td>Brown wire of all four motors</td><td class="pin">GND row</td></tr>
+              <tr><td id="row-plus">5V adapter <b>+</b></td><td class="pin">5V row</td></tr>
+              <tr><td id="row-minus">5V adapter <b>−</b></td><td class="pin">GND row</td></tr>
+              <tr><td>Capacitor long leg</td><td class="pin">5V row</td></tr>
+              <tr><td>Capacitor striped leg</td><td class="pin">GND row</td></tr>
+              <tr><td><b>NodeMCU GND pin</b></td><td class="pin">GND row</td></tr>
+            </tbody>
+          </table>
+        </div>
+
+        <div class="danger">
+          <b>The wire everyone forgets</b>
+          <p>
+            That last row. The NodeMCU's GND must join the same GND row as the motors. Without
+            it the motors have nothing to measure the signal against, so they twitch randomly
+            or sit still — even though every other wire is perfect.
+          </p>
+        </div>
+        <p class="hint">
+          The capacitor only goes in one way round. The leg next to the stripe is the negative
+          one and goes to the GND row. It smooths out the sudden gulps of current the motors
+          take when they start moving, which is what stops the board resetting.
+        </p>
+      </div>
+    </div>
+
+    <!-- 3 -->
+    <div class="step" id="s3" data-state="todo">
+      <div class="bead">3</div>
+      <div class="stepbody">
+        <h3>Send the code to the NodeMCU</h3>
+        <p>
+          This puts the robot's brain onto the board. The first time takes about a minute
+          because it has to build everything.
+        </p>
+        <div><button class="primary big" id="flash">Send it to my NodeMCU</button></div>
+        <pre id="flashlog" hidden></pre>
+        <div class="verdict" id="v3" hidden></div>
+      </div>
+    </div>
+
+    <!-- 4 -->
+    <div class="step" id="s4" data-state="todo">
+      <div class="bead">4</div>
+      <div class="stepbody">
+        <h3>Open the robot</h3>
+        <p>
+          The robot now runs its own control page. You can open it from this computer or from
+          your phone — you don't need this window any more.
+        </p>
+        <div id="golink"></div>
+        <div class="verdict" id="v4">Send the code first.</div>
+        <p class="hint">
+          <b>Didn't set up WiFi?</b> The robot makes its own instead. On your phone, join the
+          network called <b>RobotBot</b> (password <b>robot1234</b>), then open
+          <b>http://192.168.4.1</b>. This works anywhere, with no router at all.
+        </p>
+        <p class="hint">
+          To put it on your home WiFi instead, copy <b>robot/secrets.example.h</b> to
+          <b>robot/secrets.h</b>, type your network name and password in there, and send the
+          code again. That file stays on your computer.
+        </p>
+      </div>
+    </div>
+
+  </div>
+  </section>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let board=null, busy=false, robot=null, flashed=false;
+
+// --- power source toggle ---------------------------------------------------
+
+const SOURCES = {
+  adapter: { label:'5V adapter', sub:'2 amps or more', name:'5V adapter' },
+  battery: { label:'4 × AA NiMH', sub:'rechargeable, 4.8V', name:'Battery pack' },
+};
+
+function showSource(which){
+  const s = SOURCES[which];
+  $('tab-adapter').setAttribute('aria-pressed', which==='adapter');
+  $('tab-battery').setAttribute('aria-pressed', which==='battery');
+  $('src-adapter').hidden = which!=='adapter';
+  $('src-battery').hidden = which!=='battery';
+  $('svg-src').textContent = s.label;
+  $('svg-srcsub').textContent = s.sub;
+  $('row-plus').innerHTML  = s.name + ' <b>+</b>';
+  $('row-minus').innerHTML = s.name + ' <b>&minus;</b>';
+  try{ localStorage.setItem('robot.power', which); }catch{}
+}
+$('tab-adapter').onclick = () => showSource('adapter');
+$('tab-battery').onclick = () => showSource('battery');
+let savedSource = 'adapter';
+try{ savedSource = localStorage.getItem('robot.power') || 'adapter'; }catch{}
+showSource(savedSource);
+
+function setStep(id,s){$(id).dataset.state=s}
+function verdict(id,cls,text){const e=$(id);e.hidden=false;e.className='verdict '+cls;e.textContent=text}
+
+function render(){
+  $('dot').classList.toggle('ok', !!board);
+  $('conn').textContent = board ? (board.desc + ' on ' + board.port) : 'no board found';
+
+  if(board){ setStep('s1','done'); verdict('v1','good','Found your NodeMCU on '+board.port+'.'); }
+  else { setStep('s1','doing'); verdict('v1','bad',"I can't find a NodeMCU. Is the USB cable plugged in?"); }
+
+  setStep('s2', flashed ? 'done' : (board ? 'doing' : 'todo'));
+
+  $('flash').disabled = busy || !board;
+  $('flash').textContent = busy ? 'Sending…' : 'Send it to my NodeMCU';
+  if(busy) setStep('s3','doing');
+  else if(flashed){ setStep('s3','done'); verdict('v3','good','The code is on your NodeMCU.'); }
+  else setStep('s3', board ? 'doing' : 'todo');
+
+  if(robot){
+    setStep('s4','done');
+    $('golink').innerHTML = `<a class="golink" href="${robot}" target="_blank" rel="noopener">Open the robot &#8599;</a>`;
+    verdict('v4','good','Your robot is at '+robot);
+  } else if(flashed){
+    setStep('s4','doing');
+    $('golink').innerHTML='';
+    verdict('v4','wait','No address yet — use the hotspot instructions below.');
+  } else {
+    setStep('s4','todo');
+    $('golink').innerHTML='';
+    verdict('v4','wait','Send the code first.');
+  }
+}
+
+function logLine(kind,line){
+  const el=$('flashlog'); el.hidden=false;
+  const tag = kind==='error'?'i' : kind==='ok'?'u' : kind==='warn'?'s' : kind==='step'?'b' : 'span';
+  const n=document.createElement(tag); n.textContent=line+'\n';
+  el.appendChild(n); el.scrollTop=el.scrollHeight;
+}
+
+$('flash').onclick=async()=>{
+  busy=true; flashed=false; robot=null;
+  $('flashlog').textContent=''; $('flashlog').hidden=false; $('v3').hidden=true;
+  render();
+  const r=await fetch('/api/flash',{method:'POST'});
+  if(!r.ok){ busy=false; render(); }
+};
+
+const es=new EventSource('/stream');
+es.onmessage=e=>{
+  const m=JSON.parse(e.data);
+  if(m.type==='state'){
+    board=m.board; busy=m.busy; robot=m.robot;
+    render();
+  } else if(m.type==='flash'){
+    if(m.kind==='done'){ busy=false; render(); }
+    else if(m.line){
+      logLine(m.kind,m.line);
+      if(m.kind==='ok'||m.kind==='warn') flashed=true;
+      render();
+    }
+  }
+};
+es.onerror=()=>{ $('dot').classList.remove('ok'); $('conn').textContent='setup helper not running'; };
+
+setInterval(async()=>{
+  if(busy) return;
+  try{ const d=await (await fetch('/api/state')).json(); board=d.board; robot=d.robot||robot;
+       if(d.robotUrl) robotUrl=d.robotUrl; render(); }catch{}
+}, 2000);
+
+/* ===================== talking to it ===================== */
+
+let robotUrl = '';
+
+$('tab-build').onclick   = ()=>showTab('build');
+$('tab-control').onclick = ()=>showTab('control');
+function showTab(w){
+  const build = w==='build';
+  $('tab-build').setAttribute('aria-selected',build);
+  $('tab-control').setAttribute('aria-selected',!build);
+  $('view-build').hidden = !build;
+  $('view-control').hidden = build;
+  if(!build) loadMoves();
+}
+
+// Every command goes through the setup server. The browser can't call the
+// robot directly — this page is on 127.0.0.1 (required for the microphone)
+// and the robot is a different origin with no CORS headers.
+async function relay(path, params){
+  const r = await fetch('/api/relay', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({path, params: params||{}})
+  });
+  if(!r.ok) throw new Error('robot did not answer');
+  return r.json();
+}
+
+// Where each direction word puts each joint.
+const HEAD = {left:45, right:135, mid:90, up:115, down:65};
+const ARM  = {up:160, down:30, mid:90, out:90};
+const BODY = {left:55, right:125, mid:90};
+
+const SYNONYMS = {
+  lookleft : ['look left','turn left'],
+  lookright: ['look right','turn right'],
+  scan     : ['look around','scan','search','have a look'],
+  wave     : ['wave','say hi','say hello','hello'],
+  dance    : ['dance','boogie','get down'],
+  clap     : ['clap','applaud','well done'],
+  nod      : ['nod','yes','agree','move your head','nod your head'],
+  shake    : ['shake your head','shake','disagree'],
+  shrug    : ['shrug','don t know','dunno','who knows'],
+  sleep    : ['sleep','good night','go to sleep','rest'],
+  home     : ['stand','stand up','home','reset','straight','wake up'],
+};
+// Order matters: the first match wins, so specific phrases come first.
+const ORDER = ['lookleft','lookright','scan','wave','dance','clap','nod','shake','shrug','sleep','home'];
+
+let MOVES = [];   // filled from the robot; labels for the buttons
+
+const norm = w => !w ? null : (/^cent/.test(w) || w==='middle' ? 'mid' : w);
+const words = s => new RegExp('\\b' + s.replace(/\s+/g,'\\s+') + '\\b');
+
+function resolve(text){
+  const t = text.toLowerCase().replace(/[^a-z\s]/g,' ').replace(/\s+/g,' ').trim();
+
+  let m = t.match(/head\b(?:\s+(?:to|the))*\s*(left|right|middle|centre|center|up|down)/);
+  if(m && HEAD[norm(m[1])]!==undefined)
+    return {path:'/api/joint', params:{name:'Head', angle:HEAD[norm(m[1])]}, label:'Head '+norm(m[1])};
+
+  m = t.match(/\b(left|right)\s+(?:arm|hand)\b\s*(up|down|middle|centre|center|out)?/);
+  if(m){
+    const side = m[1]==='left' ? 'Left arm' : 'Right arm';
+    const d = norm(m[2]) || 'up';
+    return {path:'/api/joint', params:{name:side, angle:ARM[d] ?? 160}, label:side+' '+d};
+  }
+
+  m = t.match(/\b(?:both\s+)?(?:arms|hands)\b\s*(up|down|middle|centre|center)?/);
+  if(m){
+    const d = norm(m[1]) || 'up';
+    const a = ARM[d] ?? 160;
+    return {multi:[{path:'/api/joint',params:{name:'Left arm',angle:a}},
+                   {path:'/api/joint',params:{name:'Right arm',angle:a}}], label:'Arms '+d};
+  }
+
+  m = t.match(/\b(?:body|torso|waist)\b\s*(?:to\s+the\s+)?(left|right|middle|centre|center)/);
+  if(m) return {path:'/api/joint', params:{name:'Torso', angle:BODY[norm(m[1])]}, label:'Body '+norm(m[1])};
+
+  if(words('stop').test(t) || words('freeze').test(t)) return {path:'/api/stop', label:'Stop'};
+  if(words('relax').test(t) || words('let go').test(t)) return {path:'/api/relax', label:'Relax'};
+
+  for(const name of ORDER)
+    for(const phrase of (SYNONYMS[name]||[]))
+      if(words(phrase).test(t)){
+        const mv = MOVES.find(x=>x.name===name);
+        return {path:'/api/pose', params:{name}, label:(mv?mv.label:name)};
+      }
+  return null;
+}
+
+async function perform(cmd){
+  try{
+    if(cmd.multi) for(const c of cmd.multi) await relay(c.path, c.params);
+    else await relay(cmd.path, cmd.params);
+    $('did').className='did'; $('did').textContent='→ '+cmd.label;
+  }catch{
+    $('did').className='did miss';
+    $('did').textContent="Couldn't reach the robot. Is it powered on and on the same network?";
+  }
+}
+
+const FALLBACK_MOVES = [
+  {name:'wave',label:'Wave'},{name:'dance',label:'Dance'},{name:'clap',label:'Clap'},
+  {name:'nod',label:'Nod'},{name:'shake',label:'Shake head'},{name:'shrug',label:'Shrug'},
+  {name:'scan',label:'Look around'},{name:'lookleft',label:'Look left'},
+  {name:'lookright',label:'Look right'},{name:'sleep',label:'Sleep'},{name:'home',label:'Stand'}];
+
+function loadMoves(){
+  // Draw straight away from the built-in list. Asking the robot first would
+  // leave the page empty for as long as the request takes to time out, which
+  // is the whole six seconds when the robot is switched off.
+  if(!MOVES.length) MOVES = FALLBACK_MOVES;
+  paintMoves();
+  relay('/api/moves').then(list=>{
+    if(Array.isArray(list) && list.length){ MOVES = list; paintMoves(); }
+  }).catch(()=>{});
+}
+
+function paintMoves(){
+  $('moves').innerHTML = MOVES.map(m=>
+    `<button class="mv" data-pose="${m.name}">${m.label}</button>`).join('');
+  document.querySelectorAll('[data-pose]').forEach(b=>b.onclick=()=>
+    perform({path:'/api/pose', params:{name:b.dataset.pose}, label:b.textContent}));
+  document.querySelectorAll('[data-relay]').forEach(b=>b.onclick=()=>
+    perform({path:b.dataset.relay, label:b.textContent}));
+
+  $('phrasebook').innerHTML = [
+    ...MOVES.map(m=>[`“${(SYNONYMS[m.name]||[m.name])[0]}”`, m.label]),
+    ['“move your head left”', 'Turns the head'],
+    ['“raise your right arm”', 'Lifts one arm'],
+    ['“arms up”', 'Lifts both arms'],
+    ['“turn your body left”', 'Turns the torso'],
+    ['“stop”', 'Freezes everything'],
+    ['“relax”', 'Lets the motors go limp'],
+  ].map(([a,b])=>`<tr><td>${a}</td><td>${b}</td></tr>`).join('');
+
+  $('robotwhere').innerHTML = robotUrl
+    ? `Commands go to <b>${robotUrl}</b>. If the robot moved, restart the setup helper with <b>--robot http://its-address</b>.`
+    : '';
+}
+
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+const canListen = !!SR && window.isSecureContext;
+let rec = null, listening = false;
+
+if(!canListen){
+  $('voice-unsupported').hidden = false;
+  $('mic').disabled = true;
+  $('heard').className = 'heard dim';
+  $('heard').textContent = 'Voice needs Chrome or Edge on http://127.0.0.1:8788';
+} else {
+  rec = new SR();
+  rec.lang = 'en-US';
+  rec.continuous = false;
+  rec.interimResults = true;
+
+  rec.onstart = ()=>{ listening=true; $('mic').dataset.on='true';
+                      $('heard').className='heard dim'; $('heard').textContent='Listening…';
+                      $('did').textContent=''; };
+  rec.onend   = ()=>{ listening=false; $('mic').dataset.on='false'; };
+  rec.onerror = e=>{ listening=false; $('mic').dataset.on='false';
+                     $('heard').className='heard dim';
+                     $('heard').textContent = e.error==='not-allowed'
+                       ? 'Microphone blocked — allow it in the address bar and try again.'
+                       : 'Did not catch that ('+e.error+')'; };
+
+  rec.onresult = e=>{
+    let text='', done=false;
+    for(const r of e.results){ text += r[0].transcript; if(r.isFinal) done=true; }
+    $('heard').className='heard'; $('heard').textContent = text;
+    if(!done) return;
+    const cmd = resolve(text);
+    if(cmd) perform(cmd);
+    else { $('did').className='did miss';
+           $('did').textContent = "Didn't recognise that — see the list below."; }
+  };
+
+  $('mic').onclick = ()=>{ if(listening) rec.stop(); else { try{ rec.start(); }catch{} } };
+}
+
+render();
+</script>
+</body>
+</html>

@@ -1,0 +1,324 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>The Workshop — build these with your own Arduino</title>
+<meta name="description" content="Five Arduino projects you can build, with the code flashed straight from your browser.">
+<style>
+  :root{
+    --ground:#f3f6f6; --panel:#fff; --sunken:#e9efee; --ink:#101a1c;
+    --muted:#56696b; --line:#d5dedd; --accent:#0e7c72;
+    --good:#16a34a; --warn:#d97706; --bad:#dc2626;
+    --shadow:0 1px 2px rgba(16,26,28,.05), 0 10px 30px rgba(16,26,28,.06);
+    --mono: ui-monospace,"Cascadia Mono",Consolas,monospace;
+  }
+  @media (prefers-color-scheme: dark){
+    :root{
+      --ground:#0a1013; --panel:#111a1c; --sunken:#0d1517; --ink:#e0eaea;
+      --muted:#8a9c9e; --line:#1e2c2f; --accent:#2dd4bf;
+      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.25);
+    }
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--ground);color:var(--ink);
+       font:16px/1.65 ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1060px;margin:0 auto;padding:0 22px 80px}
+
+  header{padding:56px 0 30px}
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--accent);margin:0 0 14px}
+  h1{margin:0 0 14px;font-size:clamp(2rem,5.5vw,3rem);font-weight:730;letter-spacing:-.035em;line-height:1.06;
+     max-width:19ch;text-wrap:balance}
+  .standfirst{margin:0;color:var(--muted);max-width:60ch;font-size:1.08rem}
+
+  h2.sec{font-size:11px;letter-spacing:.15em;text-transform:uppercase;color:var(--muted);
+         margin:44px 0 16px;padding-bottom:9px;border-bottom:1px solid var(--line)}
+
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:15px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:19px;
+        box-shadow:var(--shadow);cursor:pointer;text-align:left;font:inherit;color:inherit;
+        display:flex;flex-direction:column;gap:7px;border-top:3px solid var(--line);transition:border-color .12s}
+  .card:hover{border-color:var(--accent)}
+  .card[aria-pressed=true]{border-color:var(--accent);border-top-color:var(--accent)}
+  .card h3{margin:0;font-size:1.08rem;font-weight:650}
+  .card p{margin:0;color:var(--muted);font-size:.93rem}
+  .chip{align-self:flex-start;margin-top:auto;padding-top:10px;font-family:var(--mono);
+        font-size:11px;color:var(--muted)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:22px;
+         box-shadow:var(--shadow);margin-top:16px}
+  .panel h3{margin:0 0 4px;font-size:1.25rem;font-weight:680;letter-spacing:-.015em}
+  .panel .why{margin:0 0 16px;color:var(--muted)}
+
+  button.act{font:inherit;font-weight:600;cursor:pointer;border-radius:9px;
+             border:1px solid var(--accent);background:var(--accent);color:#fff;padding:13px 24px;font-size:1.02rem}
+  @media (prefers-color-scheme: dark){button.act{color:#06302b}}
+  button.act:disabled{opacity:.45;cursor:not-allowed}
+  button.ghost{background:var(--panel);color:var(--ink);border-color:var(--line);font-weight:550;padding:9px 16px;font-size:.95rem}
+  .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
+
+  .bar{height:9px;border-radius:5px;background:var(--sunken);border:1px solid var(--line);
+       overflow:hidden;margin-top:16px}
+  .bar i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .note{margin-top:9px;font-size:.93rem;color:var(--muted);min-height:1.4em}
+  .note.err{color:var(--bad)} .note.ok{color:var(--good)}
+
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;margin-top:14px}
+  table{border-collapse:collapse;width:100%;font-size:.92rem}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line)}
+  th{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:650}
+  tr:last-child td{border-bottom:none}
+  td.pin{font-family:var(--mono);font-weight:600;white-space:nowrap}
+
+  #mon{margin:14px 0 0;padding:12px 14px;height:190px;overflow-y:auto;background:var(--sunken);
+       border:1px solid var(--line);border-radius:9px;font:12.5px/1.6 var(--mono);color:var(--muted);
+       white-space:pre-wrap;word-break:break-word}
+
+  .warnbox{display:flex;flex-direction:column;gap:6px;background:var(--panel);border:1px solid var(--line);
+           border-left:3px solid var(--warn);border-radius:0 10px 10px 0;padding:15px 18px;margin-top:16px}
+  .warnbox b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--warn);font-weight:660}
+  .warnbox p{margin:0;font-size:.95rem}
+
+  footer{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
+         color:var(--muted);font-size:.9rem;display:flex;gap:10px 24px;flex-wrap:wrap}
+  a{color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <p class="eyebrow">Open the box · plug it in · press one button</p>
+    <h1>Build these with your own Arduino</h1>
+    <p class="standfirst">
+      Five things worth making, each with its wiring and its code. Pick one, plug your board
+      into this computer, and the code goes straight onto it from this page — no downloads,
+      no Arduino IDE, nothing to install.
+    </p>
+  </header>
+
+  <div class="warnbox" id="nosupport" hidden>
+    <b>This browser can't reach your Arduino</b>
+    <p>
+      Talking to a USB device needs <b>Chrome</b>, <b>Edge</b> or <b>Opera</b> on a computer.
+      Firefox, Safari and phones don't allow it. You can still read the wiring and grab the
+      code below.
+    </p>
+  </div>
+
+  <h2 class="sec">Pick a project</h2>
+  <div class="grid" id="grid"></div>
+
+  <div id="detail"></div>
+
+  <footer>
+    <span>Built with Arduino, and flashed over WebSerial.</span>
+    <span>Nothing you do here is sent anywhere — the code goes from this page to your board.</span>
+  </footer>
+</div>
+
+<script type="module">
+import { parseHex, flashUno } from './avr.js';
+
+const PROJECTS = [
+  {
+    id:'parking-sensor', name:'Car Parking Sensor', board:'uno',
+    blurb:'Measures how far away something is and beeps faster as you get closer.',
+    why:'The same idea as the sensor in a car bumper. It shows the distance on a little screen and warns you before you hit anything.',
+    fw:'firmware/parking-sensor.hex',
+    wiring:[
+      ['OLED screen','VCC','5V'],['','GND','GND'],['','SDA','A4'],['','SCL','A5'],
+      ['Distance sensor','VCC','5V'],['','GND','GND'],['','TRIG','9'],['','ECHO','10'],
+      ['LED','long leg (+)','6, via a resistor'],['','short leg (−)','GND'],
+      ['Buzzer','+','7'],['','−','GND'],
+    ],
+    expect:'Wave your hand at the sensor — the distance changes and the beeping speeds up.'
+  },
+  {
+    id:'gas-detector', name:'Gas Leak Detector', board:'uno',
+    blurb:'Sniffs the air and sets off a light and a buzzer if it smells gas.',
+    why:'It learns what your clean air reads like, then warns you when the air changes. Fun to build — not a substitute for a proper certified alarm.',
+    fw:'firmware/gas-detector.hex',
+    wiring:[
+      ['Gas sensor','VCC','5V'],['','GND','GND'],['','AO','A5'],['','DO','not used'],
+      ['LED','long leg (+)','7, via a resistor'],['','short leg (−)','GND'],
+      ['Buzzer','+','8'],['','−','GND'],
+    ],
+    expect:'Give it half a minute to warm up. Hold an unlit lighter near it and press the gas lever — the reading jumps.'
+  },
+  {
+    id:'thermometer', name:'Thermometer', board:'uno',
+    blurb:'Reports the temperature and how damp the air is, all the time.',
+    why:'Three wires and no calibration. The easiest of these to get working, and a good first one.',
+    fw:'firmware/thermometer.hex',
+    wiring:[
+      ['DHT11 sensor','VCC','5V'],['','DATA','D2'],['','GND','GND'],
+    ],
+    expect:'Breathe gently on the sensor — the humidity jumps within a few seconds.'
+  },
+  {
+    id:'knob-servo', name:'Knob & Servo', board:'mega',
+    blurb:'Turn a knob, and a motor turns with it.',
+    why:'The simplest thing that reads the real world and moves something. A good one to get right before anything harder.',
+    fw:'firmware/knob-servo.hex',
+    wiring:[
+      ['Knob','one outer leg','5V'],['','middle leg','A0'],['','other outer leg','GND'],
+      ['Servo','orange (signal)','9'],['','red','5V'],['','brown','GND'],
+    ],
+    expect:'Turn the knob and the servo follows immediately.'
+  },
+  {
+    id:'servo-robot', name:'Servo Robot', board:'esp8266',
+    blurb:'A little robot with a head, a body and two arms that you drive from your phone.',
+    why:'It makes its own wifi hotspot and serves its own control page, so once it has power you just join it and press buttons.',
+    fw:'firmware/servo-robot.bin',
+    wiring:[
+      ['Torso servo','orange (signal)','D1'],
+      ['Head servo','orange (signal)','D2'],
+      ['Left arm servo','orange (signal)','D5'],
+      ['Right arm servo','orange (signal)','D6'],
+      ['All four servos','red','5V supply (not the board)'],
+      ['','brown','shared GND'],
+      ['NodeMCU','GND','shared GND'],
+    ],
+    expect:'Join the wifi network called RobotBot, then open 192.168.4.1 on your phone.'
+  },
+];
+
+const BOARDS = {
+  uno:     { label:'Arduino Uno',      flashable:true  },
+  mega:    { label:'Arduino Mega 2560',flashable:false, why:'A Mega uses a different bootloader protocol (STK500v2). Flashing it from the browser is not built yet — grab the code below and use the Arduino IDE.' },
+  esp8266: { label:'NodeMCU ESP8266',  flashable:false, why:'An ESP8266 is flashed a different way again. Grab the file below and use the Arduino IDE or esptool.' },
+};
+
+const $ = s => document.querySelector(s);
+const supported = 'serial' in navigator;
+if (!supported) $('#nosupport').hidden = false;
+
+let picked = null;
+
+$('#grid').innerHTML = PROJECTS.map(p => `
+  <button class="card" data-id="${p.id}" aria-pressed="false">
+    <h3>${p.name}</h3>
+    <p>${p.blurb}</p>
+    <span class="chip">${BOARDS[p.board].label}</span>
+  </button>`).join('');
+
+document.querySelectorAll('.card').forEach(c => c.onclick = () => {
+  picked = PROJECTS.find(p => p.id === c.dataset.id);
+  document.querySelectorAll('.card').forEach(x =>
+    x.setAttribute('aria-pressed', x.dataset.id === picked.id));
+  showDetail();
+  $('#detail').scrollIntoView({ behavior:'smooth', block:'start' });
+});
+
+function showDetail(){
+  const p = picked, b = BOARDS[p.board];
+  const canFlash = supported && b.flashable;
+
+  $('#detail').innerHTML = `
+    <h2 class="sec">${p.name}</h2>
+    <div class="panel">
+      <h3>${p.name}</h3>
+      <p class="why">${p.why}</p>
+
+      <div class="tablewrap">
+        <table>
+          <thead><tr><th>Part</th><th>Leg</th><th>Goes to</th></tr></thead>
+          <tbody>${p.wiring.map(([a,l,t]) =>
+            `<tr><td>${a}</td><td class="pin">${l}</td><td class="pin">${t}</td></tr>`).join('')}</tbody>
+        </table>
+      </div>
+
+      ${b.flashable ? '' : `<div class="warnbox"><b>${b.label}</b><p>${b.why}</p></div>`}
+
+      <div class="row" style="margin-top:18px">
+        <button class="act" id="go" ${canFlash ? '' : 'disabled'}>
+          ${canFlash ? 'Plug in your board and press here' : 'Browser flashing not available'}
+        </button>
+        <a class="act ghost" style="text-decoration:none;display:inline-block" href="${p.fw}" download>Download the code</a>
+        ${supported ? '<button class="act ghost" id="watch">Watch what it says</button>' : ''}
+      </div>
+
+      <div class="bar"><i id="bar"></i></div>
+      <p class="note" id="note">${canFlash
+        ? 'Your browser will ask which device to use. Pick the Arduino.'
+        : 'You can still read the wiring and download the code.'}</p>
+
+      <p class="note" style="color:var(--muted)"><b>When it works:</b> ${p.expect}</p>
+      <pre id="mon" hidden></pre>
+    </div>`;
+
+  if (canFlash) $('#go').onclick = doFlash;
+  if (supported && $('#watch')) $('#watch').onclick = doWatch;
+}
+
+function say(msg, cls=''){ const n = $('#note'); n.textContent = msg; n.className = 'note ' + cls; }
+function bar(pct){ $('#bar').style.width = pct + '%'; }
+
+async function doFlash(){
+  const btn = $('#go');
+  let port;
+  try{
+    port = await navigator.serial.requestPort();
+  }catch{ say('No device picked.', ''); return; }
+
+  btn.disabled = true;
+  try{
+    say('Fetching the code…');
+    const res = await fetch(picked.fw);
+    if(!res.ok) throw new Error('could not download the code');
+    const image = parseHex(await res.text());
+
+    await port.open({ baudRate: 115200 });
+    await flashUno(port, image, (pct, note) => { bar(pct); say(note); });
+    say('Done — your Arduino is running the new code. ' + picked.expect, 'ok');
+  }catch(err){
+    bar(0);
+    say(err.message || String(err), 'err');
+  }finally{
+    try{ await port.close(); }catch{}
+    btn.disabled = false;
+  }
+}
+
+let watching = null;
+async function doWatch(){
+  const btn = $('#watch');
+  if(watching){
+    try{ await watching.close(); }catch{}
+    watching = null; btn.textContent = 'Watch what it says';
+    return;
+  }
+  let port;
+  try{ port = await navigator.serial.requestPort(); }
+  catch{ return; }
+
+  try{
+    await port.open({ baudRate: 115200 });
+    watching = port;
+    btn.textContent = 'Stop watching';
+    const mon = $('#mon'); mon.hidden = false; mon.textContent = '';
+    const dec = new TextDecoderStream();
+    port.readable.pipeTo(dec.writable).catch(()=>{});
+    const reader = dec.readable.getReader();
+    (async () => {
+      while(true){
+        const { value, done } = await reader.read();
+        if(done) break;
+        if(value){
+          mon.textContent += value;
+          if(mon.textContent.length > 12000) mon.textContent = mon.textContent.slice(-8000);
+          mon.scrollTop = mon.scrollHeight;
+        }
+      }
+    })();
+  }catch(err){
+    say(err.message || String(err), 'err');
+  }
+}
+</script>
+</body>
+</html>

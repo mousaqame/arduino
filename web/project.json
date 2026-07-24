@@ -1,0 +1,31 @@
+﻿{
+    "name":  "Public Workshop Site",
+    "summary":  "Static site for Vercel where anyone can read the wiring and flash these projects onto their own Arduino from the browser over WebSerial.",
+    "status":  "paused",
+    "kind":  "node",
+    "started":  "2026-07-24",
+    "tags":  [
+                 "vercel",
+                 "webserial",
+                 "public",
+                 "static"
+             ],
+    "docs":  [
+                 {
+                     "label":  "Readme",
+                     "path":  "README.md"
+                 },
+                 {
+                     "label":  "Flasher",
+                     "path":  "avr.js"
+                 },
+                 {
+                     "label":  "Page",
+                     "path":  "index.html"
+                 }
+             ],
+    "apps":  [
+
+             ],
+    "notes":  "PAUSED - the user decided to keep the Workshop local rather than deploy it. Nothing is deleted; \u0027vercel --prod\u0027 from this folder would still publish it. Uno flashing over WebSerial works (STK500v1 in avr.js); Mega and ESP8266 offer downloads instead."
+}

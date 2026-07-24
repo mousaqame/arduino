@@ -1,0 +1,4 @@
+﻿# Compiler output
+.build/
+__pycache__/
+*.pyc

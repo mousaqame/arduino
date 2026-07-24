@@ -1,0 +1,47 @@
+{
+  "name": "Gas Leak Detector",
+  "summary": "MQ-2 gas sensor with an LED and buzzer. Warms up, learns what clean air reads, and alarms relative to that instead of a fixed number.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-07-24",
+  "tags": [
+    "uno",
+    "mq-2",
+    "gas",
+    "alarm",
+    "dashboard"
+  ],
+  "hardware": [
+    "Arduino Uno (COM8 — the second board, not the parking sensor one)",
+    "MQ-2 gas sensor — VCC:5V, GND:GND, AO:A5 (the module's 'A0' pin goes to A5), DO unused",
+    "LED — long leg via 220-330R resistor to pin 7 (confirmed), short leg to GND",
+    "Piezo buzzer — + to pin 8, - to GND"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Firmware",
+      "path": "gas_serial/gas_serial.ino"
+    },
+    {
+      "label": "Original sketch",
+      "path": "gas_original/gas_original.ino"
+    }
+  ],
+  "apps": [
+    {
+      "label": "Build it & watch it",
+      "cmd": [
+        "python",
+        "dashboard.py",
+        "--no-open",
+        "--lan"
+      ],
+      "port": 8789
+    }
+  ],
+  "notes": "NOT a certified safety device — an uncalibrated MQ-2 cannot report a real concentration. gas_original/ is the restore point. The sensor needs ~30s warm-up before readings mean anything, and the baseline is learned in clean air. Uses the Uno on COM8; the parking sensor uses a different board on COM3."
+}

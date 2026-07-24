@@ -1,0 +1,69 @@
+{
+  "name": "Servo Robot",
+  "summary": "Four-servo robot (torso, head, two arms) on a NodeMCU. It hosts its own control page, so a phone can drive it over WiFi with no PC involved.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-07-24",
+  "tags": [
+    "esp8266",
+    "nodemcu",
+    "servo",
+    "wifi",
+    "robot"
+  ],
+  "hardware": [
+    "NodeMCU ESP8266 (powered over its own micro-USB)",
+    "Torso servo — signal to D1 (GPIO5)",
+    "Head servo — signal to D2 (GPIO4)",
+    "Left arm servo — signal to D5 (GPIO14)",
+    "Right arm servo — signal to D6 (GPIO12)",
+    "4x MG90S metal-gear micro servos (4.8-6V, ~700mA stall each)",
+    "5V 2A adapter for the servos only, GND shared with the NodeMCU",
+    "1000uF capacitor across the 5V rail to absorb start-up current bursts"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Wiring & power",
+      "path": "README.md"
+    },
+    {
+      "label": "Firmware",
+      "path": "robot/robot.ino"
+    },
+    {
+      "label": "Control page",
+      "path": "robot/page.h"
+    },
+    {
+      "label": "Setup helper",
+      "path": "setup.py"
+    }
+  ],
+  "links": [
+    {
+      "label": "Robot control page",
+      "url": "http://robot.local"
+    },
+    {
+      "label": "Hotspot mode",
+      "url": "http://192.168.4.1"
+    }
+  ],
+  "apps": [
+    {
+      "label": "Build it & flash it",
+      "cmd": [
+        "python",
+        "setup.py",
+        "--no-open",
+        "--lan"
+      ],
+      "port": 8788
+    }
+  ],
+  "notes": "Runs on the robot itself, not this PC, so the hub has nothing to launch — use the links. Copy robot/secrets.example.h to robot/secrets.h for WiFi; without it the robot starts its own hotspot (RobotBot / robot1234). Never power the servos from the NodeMCU."
+}

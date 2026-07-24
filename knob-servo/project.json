@@ -1,0 +1,41 @@
+{
+  "name": "Knob & Servo",
+  "summary": "A potentiometer turning a servo on an Arduino Mega 2560, with calibration and the option to drive the servo from the website instead.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-07-24",
+  "tags": [
+    "mega2560",
+    "potentiometer",
+    "servo",
+    "dashboard"
+  ],
+  "hardware": [
+    "Arduino Mega 2560 (COM10)",
+    "Potentiometer - outer legs to 5V and GND, middle leg (wiper) to A0",
+    "Servo - signal to pin 9, red to 5V, brown to GND"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Firmware",
+      "path": "knob/knob.ino"
+    }
+  ],
+  "apps": [
+    {
+      "label": "Build it & control it",
+      "cmd": [
+        "python",
+        "dashboard.py",
+        "--no-open",
+        "--lan"
+      ],
+      "port": 8792
+    }
+  ],
+  "notes": "Mega 2560, so flash.ps1 uses fqbn arduino:avr:mega:cpu=atmega2560 and the 'wiring' programmer rather than 'arduino'. The pot reading is smoothed and a 2-degree deadband stops the servo buzzing on ADC noise."
+}
