@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Parking Sensor</title>
+<title>Arduino projects</title>
 <style>
   :root {
     --ground:#f3f6f6; --panel:#ffffff; --sunken:#e9efee;
@@ -218,6 +218,46 @@
   #log b { color:var(--ink); font-weight:500; }
   #log i { color:var(--stop); font-style:normal; }
 
+  /* ================= MULTI-PROJECT ================= */
+
+  .projsel {
+    font:inherit; font-weight:560; color:var(--ink);
+    background:var(--panel); border:1px solid var(--line); border-radius:8px;
+    padding:7px 11px; max-width:min(52vw, 320px);
+  }
+  .projsel:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+
+  /* live wiring check */
+  .chk {
+    display:inline-flex; align-items:center; gap:6px; white-space:nowrap;
+    font-size:12px; font-weight:600; border-radius:999px; padding:3px 10px;
+    border:1px solid var(--line); background:var(--sunken); color:var(--muted);
+  }
+  .chk.ok  { color:var(--good); border-color:color-mix(in srgb, var(--good) 45%, var(--line)); }
+  .chk.bad { color:var(--stop); border-color:color-mix(in srgb, var(--stop) 45%, var(--line)); }
+
+  .parts { display:flex; flex-direction:column; gap:9px; }
+  .partrow { display:flex; align-items:center; gap:10px; font-size:.92rem; }
+  .partrow .nm { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* generic readout tiles */
+  .tiles { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; }
+  .tile { background:var(--sunken); border:1px solid var(--line); border-radius:10px; padding:12px 14px; }
+  .tile .k { font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; color:var(--muted); font-weight:650; }
+  .tile .v { font-size:1.5rem; font-weight:680; font-variant-numeric:tabular-nums; line-height:1.25; }
+  .tile .v small { font-size:.9rem; font-weight:500; color:var(--muted); margin-left:3px; }
+
+  .grp { font-size:10.5px; letter-spacing:.12em; text-transform:uppercase;
+         color:var(--muted); font-weight:650; margin:8px 0 0; }
+
+  .note {
+    font-size:.9rem; color:var(--vclose); background:var(--sunken);
+    border:1px solid color-mix(in srgb, var(--vclose) 40%, var(--line));
+    border-radius:9px; padding:9px 13px; align-self:flex-start;
+  }
+
+  .empty { color:var(--muted); font-size:.94rem; margin:0; }
+
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -225,7 +265,8 @@
 
 <div class="wrap">
   <header>
-    <h1>Parking Sensor</h1>
+    <h1 id="title">Projects</h1>
+    <select id="proj" class="projsel" aria-label="Choose a project"></select>
     <div class="grow"></div>
     <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
   </header>
@@ -237,11 +278,7 @@
 
   <!-- ========================= SETUP ========================= -->
   <section id="view-setup" role="tabpanel" aria-labelledby="tab-setup">
-    <p class="lede">
-      This little machine measures how far away something is and beeps faster as you get
-      closer — like the parking sensor in a car. Follow the four steps and it will be
-      working in a few minutes.
-    </p>
+    <p class="lede" id="lede"></p>
 
     <div class="steps">
 
@@ -260,12 +297,9 @@
         <div class="bead">2</div>
         <div class="stepbody">
           <h3>Connect the parts</h3>
-          <p>
-            Four things plug into the Arduino. Each coloured line below is one connection —
-            match the pin number on the board to the part.
-          </p>
+          <p id="partsintro">Match the pin number on the board to each part.</p>
 
-          <figure>
+          <figure id="diagram-parking" hidden>
             <div class="diagram">
               <svg viewBox="0 0 660 380" role="img" aria-label="Wiring diagram: OLED screen to pins A4 and A5, distance sensor to pins 9 and 10, LED to pin 6, buzzer to pin 7.">
                 <!-- board -->
@@ -334,18 +368,14 @@
             </figcaption>
           </figure>
 
-          <div class="tablewrap">
+          <div class="tablewrap" id="partswrap">
             <table>
-              <thead><tr><th>Part</th><th>Arduino pin</th><th>What it does</th></tr></thead>
-              <tbody>
-                <tr><td><span class="swatch" style="background:var(--wire-oled)"></span>Little screen</td><td class="pin">A4, A5</td><td>Shows the distance in numbers</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-sonic)"></span>Distance sensor</td><td class="pin">9, 10</td><td>Sends out a click and times the echo</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-led)"></span>LED light</td><td class="pin">6</td><td>Lights up when something is close</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-buzz)"></span>Buzzer</td><td class="pin">7</td><td>Beeps faster the closer you get</td></tr>
-              </tbody>
+              <thead><tr><th>Part</th><th>Arduino pin</th><th>What it does</th><th>Check</th></tr></thead>
+              <tbody id="parts"></tbody>
             </table>
           </div>
-          <p class="hint">
+          <div class="verdict" id="v2" hidden></div>
+          <p class="hint" id="parthint" hidden>
             Not sure the LED is in the right way round? Pick the <b>Blink test</b> in step 3 —
             if the light flashes, it's wired correctly.
           </p>
@@ -378,15 +408,14 @@
         <div class="bead">4</div>
         <div class="stepbody">
           <h3>Try it out</h3>
-          <p>Wave your hand in front of the distance sensor and watch the number change.</p>
-          <div class="tryrow">
+          <p id="trytext">Watch the reading change.</p>
+          <div class="tryrow" id="tryrow">
             <span class="trynum" id="trynum">—</span>
-            <span style="color:var(--muted)">cm away</span>
+            <span style="color:var(--muted)" id="tryunit"></span>
           </div>
-          <div class="verdict" id="v4">Waiting for the sensor…</div>
-          <p class="hint">
-            Once it's working, open <b>Live view</b> at the top to see the graph and change
-            how close is "too close".
+          <div class="verdict" id="v4">Waiting for the board…</div>
+          <p class="hint" id="tryhint">
+            Once it's working, open <b>Live view</b> at the top for the full picture.
           </p>
         </div>
       </div>
@@ -396,16 +425,20 @@
 
   <!-- ========================= MONITOR ========================= -->
   <section id="view-monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
+    <div class="note" id="mismatch" hidden></div>
+
     <div class="cols">
       <div class="stack">
-        <section class="panel">
-          <h2>Distance</h2>
+        <section class="panel" id="p-primary" hidden>
+          <h2 id="ro-label">Reading</h2>
           <div class="readout">
-            <span class="dist" id="dist">—</span><span class="unit">cm</span>
-            <span class="badge" id="zone">—</span>
+            <span class="dist" id="dist">—</span><span class="unit" id="unit"></span>
+            <span class="badge" id="zone" hidden>—</span>
           </div>
           <div class="sub" id="sub">waiting for the board…</div>
-          <div class="bar">
+
+          <!-- parking only -->
+          <div class="bar" id="zonebar" hidden>
             <div class="track" id="track">
               <span id="b-stop"></span><span id="b-vclose"></span><span id="b-good"></span>
               <span id="b-close"></span><span id="b-far"></span>
@@ -415,14 +448,26 @@
           </div>
         </section>
 
-        <section class="panel">
-          <h2>History</h2>
-          <canvas id="chart"></canvas>
+        <section class="panel" id="p-tiles" hidden>
+          <h2>Readings</h2>
+          <div class="tiles" id="tiles"></div>
+        </section>
+
+        <div id="charts" class="stack"></div>
+
+        <section class="panel" id="p-noreadouts" hidden>
+          <h2>Live view</h2>
+          <p class="empty" id="noreadouts"></p>
         </section>
       </div>
 
       <div class="stack">
-        <section class="panel">
+        <section class="panel" id="p-parts">
+          <h2>Parts</h2>
+          <div class="parts" id="parts2"></div>
+        </section>
+
+        <section class="panel custom-parking" hidden>
           <h2>How close is too close (cm)</h2>
           <div class="grid2">
             <label class="field">Far     <input type="number" id="t-far"    min="1" max="400"></label>
@@ -436,7 +481,7 @@
           </div>
         </section>
 
-        <section class="panel">
+        <section class="panel custom-parking" hidden>
           <h2>Control</h2>
           <div class="btns">
             <button id="mode" class="warn sm">Mode: Auto</button>
@@ -458,15 +503,58 @@
 
 <script>
 const $ = id => document.getElementById(id);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g,
+  c => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+
+let projects = [];        // every project on disk
+let proj = null;          // the one being looked at
+let selected = null;      // its id
+let active = null;        // what was last flashed onto the board
+
+let values = {};          // latest telemetry, per key
+let ready = {};           // latest R line
+let history = [];         // [{t, v:{...}}]
+let recent = [];          // short window for smoothing the primary readout
 
 let cfg = { far:100, close:50, good:20, vclose:10, muted:'0', mode:'AUTO' };
-let history = [];
-let recent = [];
 let editing = null;
 let health = 'offline';
 let flashing = false;
 let seenLow = Infinity, seenHigh = -Infinity;   // proves the sensor actually responds
+let lastMoved = null;     // last rendered "has it moved?" verdict, to avoid churn
 let userPickedTab = false;
+let dirty = false;
+
+// ---- manifest helpers ---------------------------------------------------
+
+const isParking = () => !!(proj && proj.custom === 'parking');
+const readouts  = () => (proj && proj.readouts) || [];
+const parts     = () => (proj && proj.components) || [];
+
+function primaryRO() {
+  const nums = readouts().filter(r => (r.kind || 'number') === 'number');
+  return nums.find(r => r.primary) || nums[0] || null;
+}
+const badgeRO = () => readouts().find(r => r.kind === 'badge') || null;
+const chartROs = () => readouts().filter(r => r.chart);
+function tileROs() {
+  const p = primaryRO(), b = badgeRO();
+  return readouts().filter(r => r !== p && r !== b);
+}
+
+/** A readout's current value, or null when it's missing / a no-data sentinel. */
+function valOf(ro, bag) {
+  if (!ro || !bag) return null;
+  const x = bag[ro.key];
+  if (x === undefined || x === null) return null;
+  if (ro.noData !== undefined && typeof x === 'number' && x >= ro.noData) return null;
+  return x;
+}
+
+function badgeColor(v) {
+  const b = badgeRO();
+  return (b && b.colors && b.colors[v]) || null;
+}
 
 // ---- helpers ------------------------------------------------------------
 
@@ -504,6 +592,120 @@ function showTab(which) {
 $('tab-setup').onclick   = () => { userPickedTab = true; showTab('setup'); };
 $('tab-monitor').onclick = () => { userPickedTab = true; showTab('monitor'); };
 
+// ---- project selection --------------------------------------------------
+
+async function loadProjects() {
+  const r = await fetch('/api/projects');
+  const d = await r.json();
+  projects = d.projects || [];
+  active = d.active || null;
+
+  let want = null;
+  try { want = localStorage.getItem('proj'); } catch {}
+  // What's on the board wins, then whatever was open last. Falling back to
+  // projects[0] would land on "Blink test" alphabetically, so prefer a real
+  // project over a variant or a test.
+  const first = (projects.find(p => (p.kind || 'project') === 'project') || projects[0] || {}).id;
+  const pick = [active, want, first].find(id => id && projects.some(p => p.id === id));
+  if (pick) selectProject(pick);
+}
+
+function selectProject(id) {
+  const p = projects.find(x => x.id === id);
+  if (!p) return;
+  selected = id;
+  proj = p;
+  recent = [];
+  seenLow = Infinity; seenHigh = -Infinity; lastMoved = null;
+  try { localStorage.setItem('proj', id); } catch {}
+  renderAll();
+}
+
+$('proj').onchange = e => selectProject(e.target.value);
+
+function renderChrome() {
+  $('title').textContent = proj ? proj.name : 'Projects';
+  document.title = proj ? proj.name : 'Arduino projects';
+  $('lede').textContent = (proj && proj.lede) || '';
+  $('lede').hidden = !(proj && proj.lede);
+
+  const groups = [['project','Projects'], ['variant','Other versions'], ['test','Tests']];
+  let opts = '';
+  for (const [kind, label] of groups) {
+    const items = projects.filter(p => (p.kind || 'project') === kind);
+    if (!items.length) continue;
+    opts += `<optgroup label="${esc(label)}">` + items.map(p =>
+      `<option value="${esc(p.id)}"${p.id === selected ? ' selected' : ''}>${esc(p.name)}</option>`
+    ).join('') + '</optgroup>';
+  }
+  $('proj').innerHTML = opts;
+  $('proj').hidden = projects.length < 2;
+}
+
+function renderMismatch() {
+  const el = $('mismatch');
+  if (active && selected && selected !== active) {
+    const a = projects.find(p => p.id === active);
+    el.hidden = false;
+    el.textContent = `You're looking at "${proj.name}", but the board is running `
+      + `"${a ? a.name : active}". Send this one from Set it up to see its readings.`;
+  } else {
+    el.hidden = true;
+  }
+}
+
+// ---- parts + wiring check -----------------------------------------------
+
+function chkHtml(id) {
+  if (health === 'offline') return '<span class="chk">—</span>';
+  const r = ready[id];
+  if (r === true)  return '<span class="chk ok">&#10003; found</span>';
+  if (r === false) return '<span class="chk bad">&#10007; not found</span>';
+  return '<span class="chk">can&#39;t check</span>';
+}
+
+function renderParts() {
+  const cs = parts();
+  $('partswrap').hidden = !cs.length;
+  $('p-parts').hidden = !cs.length;
+  $('partsintro').textContent = cs.length
+    ? 'Match the pin number on the board to each part.'
+    : "This project doesn't list any parts.";
+
+  $('parts').innerHTML = cs.map(c => `<tr>
+    <td><span class="swatch" style="background:${esc(c.color || 'var(--muted)')}"></span>${esc(c.label || c.id)}</td>
+    <td class="pin">${esc(c.pins || '—')}</td>
+    <td>${esc(c.what || '')}</td>
+    <td>${chkHtml(c.id)}</td></tr>`).join('');
+
+  $('parts2').innerHTML = cs.map(c => `<div class="partrow">
+    <span class="swatch" style="background:${esc(c.color || 'var(--muted)')}"></span>
+    <span class="nm">${esc(c.label || c.id)}</span>${chkHtml(c.id)}</div>`).join('');
+}
+
+// ---- flashing picker ----------------------------------------------------
+
+function renderPicks() {
+  const groups = [['project','Projects'], ['variant','Other versions'], ['test','Tests']];
+  const mixed = projects.some(p => (p.kind || 'project') !== 'project');
+  let html = '';
+  for (const [kind, label] of groups) {
+    const items = projects.filter(p => (p.kind || 'project') === kind);
+    if (!items.length) continue;
+    if (mixed) html += `<p class="grp">${esc(label)}</p>`;
+    html += items.map(p => `<label class="pick">
+      <input type="radio" name="sketch" value="${esc(p.id)}"${p.id === selected ? ' checked' : ''}>
+      <span>
+        <b>${esc(p.name)}${p.id === active ? '<span class="tag">on the board</span>' : ''}</b>
+        <span>${esc(p.blurb || '')}</span>
+      </span></label>`).join('');
+  }
+  $('picks').innerHTML = html;
+  $('picks').querySelectorAll('input[name=sketch]').forEach(i => {
+    i.addEventListener('change', () => selectProject(i.value));
+  });
+}
+
 // ---- setup steps --------------------------------------------------------
 
 function setStep(id, state) { $(id).dataset.state = state; }
@@ -524,15 +726,41 @@ function renderSetup() {
     verdict('v1', 'good', 'Found your Arduino.');
   }
 
-  // 2 — wiring can't be checked automatically; it's a read-and-do step.
-  setStep('s2', health === 'ok' ? 'done' : (health === 'offline' ? 'todo' : 'doing'));
+  // 2 — wiring, checked against the board's own R line where it sends one
+  const cs = parts();
+  const known = cs.filter(c => ready[c.id] !== undefined);
+  const missing = cs.filter(c => ready[c.id] === false);
+  if (!cs.length) {
+    setStep('s2', 'done');
+    $('v2').hidden = true;
+  } else if (health === 'offline') {
+    setStep('s2', 'todo');
+    $('v2').hidden = true;
+  } else if (missing.length) {
+    setStep('s2', 'doing');
+    verdict('v2', 'bad', "Can't find: " + missing.map(c => c.label || c.id).join(', ')
+      + '. Check those wires.');
+  } else if (known.length) {
+    setStep('s2', 'done');
+    verdict('v2', 'good', known.length === cs.length
+      ? 'All the parts are connected.'
+      : 'Every part I can check is connected.');
+  } else {
+    setStep('s2', health === 'ok' ? 'done' : 'doing');
+    verdict('v2', 'wait', "This project doesn't report its wiring — compare with the list yourself.");
+  }
 
   // 3 — has the right code been sent?
   if (flashing) {
     setStep('s3', 'doing');
-  } else if (health === 'ok') {
+  } else if (health === 'ok' && selected === active) {
     setStep('s3', 'done');
-    verdict('v3', 'good', 'The Arduino is running the right code.');
+    verdict('v3', 'good', 'The Arduino is running this project.');
+  } else if (health === 'ok') {
+    setStep('s3', active ? 'doing' : 'done');
+    verdict('v3', active ? 'wait' : 'good', active
+      ? 'The board is talking, but it is running a different project — send this one.'
+      : 'The Arduino is running code and talking to this page.');
   } else if (health === 'silent') {
     setStep('s3', 'doing');
     verdict('v3', 'wait', "Your board is plugged in but isn't talking yet — send it the code below.");
@@ -542,34 +770,40 @@ function renderSetup() {
   }
   $('flash').disabled = flashing || health === 'offline';
 
-  // 4 — is the sensor actually reacting?
+  renderTry();
+}
+
+function renderTry() {
+  const ro = primaryRO();
+  if (!ro) {
+    $('tryrow').hidden = true;
+    $('tryhint').hidden = true;
+    $('trytext').textContent =
+      "This project doesn't send anything back to the computer — watch the board itself.";
+    setStep('s4', health === 'ok' || health === 'silent' ? 'done' : 'todo');
+    $('v4').hidden = true;
+    return;
+  }
+  $('tryrow').hidden = false;
+  $('tryhint').hidden = false;
+  $('trytext').textContent = (proj && proj.try)
+    || `Watch the ${(ro.label || ro.key).toLowerCase()} change.`;
+  $('tryunit').textContent = ro.unit || '';
+
   const moved = (seenHigh - seenLow) > 5;
   if (health !== 'ok') {
     setStep('s4', 'todo');
     verdict('v4', 'wait', 'Finish the steps above first.');
   } else if (moved) {
     setStep('s4', 'done');
-    verdict('v4', 'good', "It's working! The sensor is measuring properly.");
+    verdict('v4', 'good', "It's working! The sensor is reading properly.");
   } else {
     setStep('s4', 'doing');
-    verdict('v4', 'wait', 'Move your hand closer and further away to test it.');
+    verdict('v4', 'wait', 'Move something closer and further away to test it.');
   }
 }
 
 // ---- flashing -----------------------------------------------------------
-
-async function loadSketches() {
-  const r = await fetch('/api/sketches');
-  const d = await r.json();
-  $('picks').innerHTML = d.sketches.map((s, i) => `
-    <label class="pick">
-      <input type="radio" name="sketch" value="${s.name}" ${s.needed ? 'checked' : ''}>
-      <span>
-        <b>${s.title}${s.needed ? '<span class="tag">use this one</span>' : ''}</b>
-        <span>${s.blurb}</span>
-      </span>
-    </label>`).join('');
-}
 
 function flashLine(kind, line) {
   const el = $('flashlog');
@@ -585,7 +819,7 @@ $('flash').onclick = async () => {
   const pick = document.querySelector('input[name=sketch]:checked');
   if (!pick) return;
   flashing = true;
-  seenLow = Infinity; seenHigh = -Infinity;
+  seenLow = Infinity; seenHigh = -Infinity; lastMoved = null;
   $('flashlog').textContent = '';
   $('flashlog').hidden = false;
   $('v3').hidden = true;
@@ -598,16 +832,173 @@ $('flash').onclick = async () => {
   if (!r.ok) { flashing = false; $('flash').textContent = 'Send it to my Arduino'; renderSetup(); }
 };
 
-// ---- monitor rendering --------------------------------------------------
+// ---- live view ----------------------------------------------------------
 
-const COLOR = { 'FAR':'var(--far)', 'CLOSE':'var(--close)', 'GOOD':'var(--good)',
-                'V.CLOSE':'var(--vclose)', 'STOP!':'var(--stop)' };
+function buildMonitor() {
+  document.querySelectorAll('.custom-parking').forEach(el => el.hidden = !isParking());
+  $('zonebar').hidden = !isParking();
+  $('parthint').hidden = !isParking();
+  $('diagram-parking').hidden = !(proj && proj.diagram === 'parking');
+
+  const ro = primaryRO(), b = badgeRO();
+  $('p-primary').hidden = !ro && !b;
+  $('ro-label').textContent = ro ? (ro.label || ro.key) : (b ? (b.label || b.key) : 'Reading');
+  $('unit').textContent = ro ? (ro.unit || '') : '';
+  $('zone').hidden = !b;
+
+  const tiles = tileROs();
+  $('p-tiles').hidden = !tiles.length;
+
+  const host = $('charts');
+  host.innerHTML = chartROs().map(r => `<section class="panel">
+      <h2>${esc(r.label || r.key)} over time</h2>
+      <canvas data-key="${esc(r.key)}"></canvas>
+    </section>`).join('');
+
+  $('p-noreadouts').hidden = readouts().length > 0;
+  $('noreadouts').textContent =
+    "This project doesn't send readings back to the computer. Watch the board itself — "
+    + 'the screen and the buzzer do the work.';
+
+  renderValues();
+}
+
+const median = xs => [...xs].sort((a, b) => a - b)[Math.floor(xs.length / 2)];
+
+function renderValues() {
+  const ro = primaryRO(), b = badgeRO();
+
+  if (ro) {
+    const x = valOf(ro, values);
+    if (typeof x === 'number') {
+      recent.push(x);
+      if (recent.length > 3) recent.shift();
+      const m = median(recent);
+      $('dist').textContent = Number.isInteger(m) ? String(m) : m.toFixed(m < 10 ? 1 : 0);
+      $('trynum').textContent = $('dist').textContent;
+      $('sub').textContent = `raw ${x} ${ro.unit || ''} · median of last ${recent.length}`;
+      seenLow = Math.min(seenLow, x);
+      seenHigh = Math.max(seenHigh, x);
+    } else {
+      recent = [];
+      $('dist').textContent = '—';
+      $('trynum').textContent = '—';
+      $('sub').textContent = health === 'ok' ? 'no reading' : 'waiting for the board…';
+    }
+  }
+
+  if (b) {
+    const v = values[b.key];
+    const txt = v === undefined || v === null ? '—' : String(v);
+    const col = badgeColor(txt);
+    $('zone').textContent = txt;
+    $('zone').style.background = col || 'var(--sunken)';
+    $('zone').style.color = col ? '#08111a' : 'var(--muted)';
+    if (col && txt === 'FAR') $('zone').style.color = '#fff';
+    $('dist').style.color = col || 'var(--ink)';
+    $('trynum').style.color = col || 'var(--ink)';
+  }
+
+  const tiles = tileROs();
+  if (tiles.length) {
+    $('tiles').innerHTML = tiles.map(r => {
+      const x = valOf(r, values);
+      let shown = '—';
+      if (x !== null) {
+        if (r.kind === 'bool') shown = (x === 1 || x === '1' || x === true) ? 'On' : 'Off';
+        else if (typeof x === 'number') shown = Number.isInteger(x) ? String(x) : x.toFixed(1);
+        else shown = String(x);
+      }
+      return `<div class="tile"><div class="k">${esc(r.label || r.key)}</div>
+        <div class="v">${esc(shown)}${r.unit ? `<small>${esc(r.unit)}</small>` : ''}</div></div>`;
+    }).join('');
+  }
+
+  // Step 4 asks "does the sensor actually react?" — telemetry is the only thing
+  // that can answer it, and health stays 'ok' throughout, so renderSetup() never
+  // fires again on its own. Re-render only when the verdict actually flips.
+  const moved = (seenHigh - seenLow) > 5;
+  if (moved !== lastMoved) { lastMoved = moved; renderTry(); }
+
+  // parking's marker rides the banded track
+  if (isParking()) {
+    const x = valOf(primaryRO(), values);
+    const mk = $('marker');
+    if (typeof x === 'number') {
+      mk.style.opacity = '1';
+      mk.style.left = (Math.min(x, maxRange()) / maxRange() * 100) + '%';
+    } else {
+      mk.style.opacity = '0';
+    }
+  }
+
+  dirty = true;
+}
+
+// ---- charts -------------------------------------------------------------
+
+function chartMax(ro) {
+  if (isParking() && ro.key === 'distance') return maxRange();
+  if (ro.max !== undefined) return ro.max;
+  const nums = history.map(p => valOf(ro, p.v)).filter(v => typeof v === 'number');
+  if (!nums.length) return 1;
+  return Math.max(1, Math.ceil(Math.max.apply(null, nums) * 1.15));
+}
+
+function drawOne(cv, ro) {
+  if (!cv.clientWidth) return;                     // hidden tab has no size
+  const ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) { cv.width = w * dpr; cv.height = h * dpr; }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const max = chartMax(ro);
+  const y = v => h - (Math.min(v, max) / max) * h;
+
+  if (isParking() && ro.key === 'distance') {
+    ctx.setLineDash([3, 4]); ctx.lineWidth = 1;
+    for (const [k, c] of [['far', RAW['CLOSE']], ['close', RAW['GOOD']],
+                          ['good', RAW['V.CLOSE']], ['vclose', RAW['STOP!']]]) {
+      ctx.strokeStyle = c; ctx.globalAlpha = .35;
+      ctx.beginPath(); ctx.moveTo(0, y(cfg[k])); ctx.lineTo(w, y(cfg[k])); ctx.stroke();
+    }
+    ctx.setLineDash([]); ctx.globalAlpha = 1;
+  }
+
+  const pts = history.slice(-240).map(p => valOf(ro, p.v));
+  if (pts.filter(v => typeof v === 'number').length < 2) return;
+  const n = pts.length, x = i => (i / (n - 1)) * w;
+
+  const lastBadge = values[(badgeRO() || {}).key];
+  ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.strokeStyle = (lastBadge !== undefined && RAW[lastBadge]) || badgeColor(lastBadge) || '#2dd4bf';
+  ctx.beginPath();
+  let pen = false;
+  pts.forEach((v, i) => {
+    if (typeof v !== 'number') { pen = false; return; }
+    if (!pen) { ctx.moveTo(x(i), y(v)); pen = true; } else ctx.lineTo(x(i), y(v));
+  });
+  ctx.stroke();
+}
+
+function drawCharts() {
+  document.querySelectorAll('#charts canvas').forEach(cv => {
+    const ro = readouts().find(r => r.key === cv.dataset.key);
+    if (ro) drawOne(cv, ro);
+  });
+}
+
+// ---- parking-only extras ------------------------------------------------
+
 const RAW = { 'FAR':'#64748b', 'CLOSE':'#0ea5e9', 'GOOD':'#16a34a',
               'V.CLOSE':'#d97706', 'STOP!':'#dc2626' };
 
 function maxRange() { return Math.max(120, Math.round(cfg.far * 1.4)); }
 
 function renderBands() {
+  if (!isParking()) return;
   const max = maxRange();
   const pct = v => (Math.min(v, max) / max * 100) + '%';
   [['b-stop', cfg.vclose, RAW['STOP!']],
@@ -625,34 +1016,6 @@ function renderBands() {
   $('tick-max').textContent = max;
 }
 
-const median = xs => [...xs].sort((a,b) => a-b)[Math.floor(xs.length/2)];
-
-function renderReading(d, zone) {
-  if (d === null) {
-    $('dist').textContent = '—';
-    $('sub').textContent = 'nothing in range';
-    $('marker').style.opacity = '0';
-    $('trynum').textContent = '—';
-    recent = [];
-  } else {
-    recent.push(d);
-    if (recent.length > 3) recent.shift();
-    const m = median(recent);
-    $('dist').textContent = m.toFixed(0);
-    $('trynum').textContent = m.toFixed(0);
-    $('sub').textContent = `raw ${d.toFixed(1)} cm · median of last ${recent.length}`;
-    $('marker').style.opacity = '1';
-    $('marker').style.left = (Math.min(d, maxRange()) / maxRange() * 100) + '%';
-    seenLow = Math.min(seenLow, d);
-    seenHigh = Math.max(seenHigh, d);
-  }
-  $('zone').textContent = zone;
-  $('zone').style.background = COLOR[zone] || 'var(--sunken)';
-  $('zone').style.color = zone === 'FAR' ? '#fff' : '#08111a';
-  $('dist').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--ink)';
-  $('trynum').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--ink)';
-}
-
 function renderConfig() {
   for (const k of ['far','close','good','vclose'])
     if (editing !== k) $('t-' + k).value = cfg[k];
@@ -666,90 +1029,6 @@ function renderConfig() {
   renderBands();
 }
 
-function drawChart() {
-  const cv = $('chart');
-  if (!cv.clientWidth) return;              // hidden tab has no size
-  const ctx = cv.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  const w = cv.clientWidth, h = cv.clientHeight;
-  if (cv.width !== w*dpr || cv.height !== h*dpr) { cv.width = w*dpr; cv.height = h*dpr; }
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  ctx.clearRect(0, 0, w, h);
-
-  const max = maxRange();
-  const y = v => h - (Math.min(v, max) / max) * h;
-
-  ctx.setLineDash([3,4]); ctx.lineWidth = 1;
-  for (const [k,c] of [['far',RAW['CLOSE']],['close',RAW['GOOD']],
-                       ['good',RAW['V.CLOSE']],['vclose',RAW['STOP!']]]) {
-    ctx.strokeStyle = c; ctx.globalAlpha = .35;
-    ctx.beginPath(); ctx.moveTo(0, y(cfg[k])); ctx.lineTo(w, y(cfg[k])); ctx.stroke();
-  }
-  ctx.setLineDash([]); ctx.globalAlpha = 1;
-
-  if (history.length < 2) return;
-  const n = Math.min(history.length, 240);
-  const pts = history.slice(-n);
-  const x = i => (i / (n-1)) * w;
-
-  ctx.lineWidth = 2; ctx.lineJoin = 'round';
-  ctx.strokeStyle = RAW[pts[pts.length-1].z] || 'var(--ink)';
-  ctx.beginPath();
-  let pen = false;
-  pts.forEach((p,i) => {
-    if (p.d === null) { pen = false; return; }
-    if (!pen) { ctx.moveTo(x(i), y(p.d)); pen = true; } else ctx.lineTo(x(i), y(p.d));
-  });
-  ctx.stroke();
-}
-
-// ---- stream -------------------------------------------------------------
-
-let dirty = false;
-const es = new EventSource('/stream');
-
-es.onmessage = e => {
-  const m = JSON.parse(e.data);
-
-  if (m.type === 'snapshot') {
-    setConn(m.connected, m.health);
-    if (m.config && Object.keys(m.config).length) applyCfg(m.config);
-    history = m.history || [];
-    $('log').textContent = '';
-    (m.log || []).forEach(l => addLog(l));
-    const last = history[history.length - 1];
-    if (last) renderReading(last.d, last.z);
-    if (!userPickedTab) showTab(m.health === 'ok' ? 'monitor' : 'setup');
-    dirty = true;
-
-  } else if (m.type === 'telemetry') {
-    history.push({ t:m.t, d:m.d, z:m.z });
-    if (history.length > 240) history.shift();
-    renderReading(m.d, m.z);
-    if (health !== 'ok') { health = 'ok'; setConn(true, 'ok'); }
-    dirty = true;
-
-  } else if (m.type === 'config') {
-    applyCfg(m.config);
-
-  } else if (m.type === 'status') {
-    setConn(m.connected, m.health);
-
-  } else if (m.type === 'flash') {
-    if (m.kind === 'done') {
-      flashing = false;
-      $('flash').textContent = 'Send it to my Arduino';
-    } else if (m.line) {
-      flashLine(m.kind, m.line);
-    }
-    renderSetup();
-
-  } else if (m.type === 'log') {
-    addLog(m.line);
-  }
-};
-es.onerror = () => setConn(false, 'offline');
-
 function applyCfg(c) {
   for (const k of ['far','close','good','vclose'])
     if (c[k] !== undefined) cfg[k] = parseInt(c[k], 10);
@@ -758,21 +1037,6 @@ function applyCfg(c) {
   renderConfig();
   dirty = true;
 }
-
-function setConn(ok, h) {
-  if (h) health = h;
-  else health = ok ? 'silent' : 'offline';
-  const dot = $('dot');
-  dot.classList.toggle('ok', health === 'ok');
-  dot.classList.toggle('warn', health === 'silent' || health === 'busy');
-  $('conn').textContent =
-    health === 'ok'      ? 'connected' :
-    health === 'silent'  ? 'plugged in, no code yet' :
-    health === 'busy'    ? 'sending code…' : 'no board found';
-  renderSetup();
-}
-
-// ---- monitor controls ---------------------------------------------------
 
 for (const k of ['far','close','good','vclose']) {
   const el = $('t-' + k);
@@ -798,10 +1062,97 @@ $('led').onclick = () => {
   $('led').classList.toggle('active', ledOn);
 };
 
+// ---- render everything --------------------------------------------------
+
+function renderAll() {
+  renderChrome();
+  renderPicks();
+  renderParts();
+  renderMismatch();
+  buildMonitor();
+  renderConfig();
+  renderSetup();
+}
+
+// ---- stream -------------------------------------------------------------
+
+const es = new EventSource('/stream');
+
+es.onmessage = e => {
+  const m = JSON.parse(e.data);
+
+  if (m.type === 'snapshot') {
+    if (m.active !== undefined && m.active !== null) active = m.active;
+    values = m.values || {};
+    ready = m.ready || {};
+    history = m.history || [];
+    setConn(m.connected, m.health);
+    if (m.config && Object.keys(m.config).length) applyCfg(m.config);
+    $('log').textContent = '';
+    (m.log || []).forEach(l => addLog(l));
+    renderParts();
+    renderMismatch();
+    renderValues();
+    if (!userPickedTab) showTab(m.health === 'ok' ? 'monitor' : 'setup');
+    dirty = true;
+
+  } else if (m.type === 'telemetry') {
+    values = m.v || {};
+    history.push({ t: m.t, v: values });
+    if (history.length > 240) history.shift();
+    renderValues();
+    if (health !== 'ok') { health = 'ok'; setConn(true, 'ok'); }
+
+  } else if (m.type === 'ready') {
+    ready = m.ready || {};
+    renderParts();
+    renderSetup();
+
+  } else if (m.type === 'active') {
+    active = m.active;
+    renderPicks();
+    renderMismatch();
+    renderSetup();
+
+  } else if (m.type === 'config') {
+    applyCfg(m.config);
+
+  } else if (m.type === 'status') {
+    setConn(m.connected, m.health);
+
+  } else if (m.type === 'flash') {
+    if (m.kind === 'done') {
+      flashing = false;
+      $('flash').textContent = 'Send it to my Arduino';
+    } else if (m.line) {
+      flashLine(m.kind, m.line);
+    }
+    renderSetup();
+
+  } else if (m.type === 'log') {
+    addLog(m.line);
+  }
+};
+es.onerror = () => setConn(false, 'offline');
+
+function setConn(ok, h) {
+  if (h) health = h;
+  else health = ok ? 'silent' : 'offline';
+  const dot = $('dot');
+  dot.classList.toggle('ok', health === 'ok');
+  dot.classList.toggle('warn', health === 'silent' || health === 'busy');
+  $('conn').textContent =
+    health === 'ok'      ? 'connected' :
+    health === 'silent'  ? 'plugged in, no code yet' :
+    health === 'busy'    ? 'sending code…' : 'no board found';
+  renderParts();
+  renderSetup();
+}
+
 // ---- loop ---------------------------------------------------------------
 
 function tick() {
-  if (dirty && !$('view-monitor').hidden) { drawChart(); dirty = false; }
+  if (dirty && !$('view-monitor').hidden) { drawCharts(); dirty = false; }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
@@ -810,15 +1161,12 @@ window.addEventListener('resize', () => dirty = true);
 // The board goes quiet without disconnecting when the wrong sketch is loaded,
 // so re-evaluate health on a timer rather than only on incoming messages.
 setInterval(() => {
-  const last = history[history.length - 1];
-  const stale = !last || (performance.now() - (window._lastRx || 0)) > 2500;
+  const stale = (performance.now() - (window._lastRx || 0)) > 2500;
   if (stale && health === 'ok' && !flashing) { health = 'silent'; setConn(true, 'silent'); }
 }, 1500);
 es.addEventListener('message', () => window._lastRx = performance.now());
 
-loadSketches();
-renderConfig();
-renderSetup();
+loadProjects();
 </script>
 </body>
 </html>

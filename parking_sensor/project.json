@@ -1,0 +1,16 @@
+{
+  "name": "Parking sensor on its own",
+  "blurb": "Works by itself with the little screen, but this website won't be able to talk to it. This is the restore point — flashing it puts the board back how it started.",
+  "kind": "variant",
+  "lede": "The same parking sensor, but standalone: no computer needed once it's flashed. The screen and the buzzer do everything. Live view stays empty because this version doesn't send anything back.",
+
+  "components": [
+    { "id": "oled",  "label": "Little screen",   "pins": "A4, A5", "what": "Shows the distance in numbers",        "color": "var(--wire-oled)" },
+    { "id": "sonic", "label": "Distance sensor", "pins": "9, 10",  "what": "Sends out a click and times the echo", "color": "var(--wire-sonic)" },
+    { "id": "led",   "label": "LED light",       "pins": "6",      "what": "Lights up when something is close",    "color": "var(--wire-led)" },
+    { "id": "buzz",  "label": "Buzzer",          "pins": "7",      "what": "Beeps faster the closer you get",      "color": "var(--wire-buzz)" }
+  ],
+
+  "readouts": [],
+  "diagram": "parking"
+}

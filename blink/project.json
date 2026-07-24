@@ -1,0 +1,12 @@
+{
+  "name": "Blink test",
+  "blurb": "Just flashes the LED on and off. Handy for checking your LED is wired up the right way round.",
+  "kind": "test",
+  "lede": "The simplest possible program: turn the LED on, turn it off, repeat. If the light flashes, your LED is wired correctly — if it doesn't, try turning it around.",
+
+  "components": [
+    { "id": "led", "label": "LED light", "pins": "6", "what": "Blinks 5 times, pauses, repeats", "color": "var(--wire-led)" }
+  ],
+
+  "readouts": []
+}

@@ -1,0 +1,31 @@
+{
+  "name": "Car Parking Sensor",
+  "blurb": "The full project. Measures distance, shows it on the screen, and beeps faster as you get closer. This is the one that talks to this website.",
+  "kind": "project",
+  "lede": "This little machine measures how far away something is and beeps faster as you get closer — like the parking sensor in a car. Follow the four steps and it will be working in a few minutes.",
+  "try": "Wave your hand in front of the distance sensor and watch the number change.",
+
+  "components": [
+    { "id": "oled",  "label": "Little screen",   "pins": "A4, A5", "what": "Shows the distance in numbers",        "color": "var(--wire-oled)" },
+    { "id": "sonic", "label": "Distance sensor", "pins": "9, 10",  "what": "Sends out a click and times the echo", "color": "var(--wire-sonic)" },
+    { "id": "led",   "label": "LED light",       "pins": "6",      "what": "Lights up when something is close",    "color": "var(--wire-led)" },
+    { "id": "buzz",  "label": "Buzzer",          "pins": "7",      "what": "Beeps faster the closer you get",      "color": "var(--wire-buzz)" }
+  ],
+
+  "readouts": [
+    {
+      "key": "distance", "label": "Distance", "unit": "cm",
+      "primary": true, "chart": true, "max": 140, "noData": 999
+    },
+    {
+      "key": "zone", "label": "Zone", "kind": "badge",
+      "colors": {
+        "FAR": "#64748b", "CLOSE": "#0ea5e9", "GOOD": "#16a34a",
+        "V.CLOSE": "#d97706", "STOP!": "#dc2626"
+      }
+    }
+  ],
+
+  "diagram": "parking",
+  "custom": "parking"
+}

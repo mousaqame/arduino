@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Live dashboard for the parking_serial Arduino firmware.
+"""Live dashboard for any Arduino project in this repo.
 
 Owns the serial port, streams telemetry to the browser over SSE, and relays
 commands back to the board.
 
-    python dashboard.py                 # COM3, http://127.0.0.1:8787
-    python dashboard.py --port COM4 --http-port 9000 --no-open
+    python dashboard.py                 # COM3, http://0.0.0.0:8787
+    python dashboard.py --port COM4 --http-port 8788 --no-open
+    python dashboard.py --host 127.0.0.1        # this machine only
+
+Projects are discovered from disk: any directory holding `<name>/<name>.ino` is
+a project, and an optional `<name>/project.json` describes its parts and
+readouts. See PROTOCOL.md — a conforming project needs no code here.
 
 Also flashes sketches from the browser: it hands the serial port to avrdude for
 the upload and takes it back afterwards, so nothing needs stopping by hand.
@@ -21,6 +26,7 @@ import argparse
 import json
 import queue
 import re
+import socket
 import subprocess
 import threading
 import time
@@ -33,11 +39,75 @@ import serial
 
 HERE = Path(__file__).resolve().parent
 
-TELEM_RE = re.compile(r"^T (\d+) (-?[\d.]+) (\S+)$")
+# `T <millis> <anything>` — the payload decides which form it is.
+TELEM_RE = re.compile(r"^T (\d+)\s+(.*)$")
+# Legacy positional parking telemetry: `T <millis> <distance> <zone>`.
+LEGACY_RE = re.compile(r"^T (\d+) (-?[\d.]+) (\S+)$")
+READY_RE = re.compile(r"^R (.+)$")
 CFG_RE = re.compile(r"^OK CFG (.+)$")
 
+# The legacy form's "no echo" sentinel. New projects declare their own via the
+# manifest's `noData`, applied browser-side.
 NO_ECHO = 999.0
 HISTORY = 240
+
+TRUTHY = {"1", "true", "yes", "on", "ok"}
+
+
+def parse_kv(payload: str) -> dict:
+    """`a=1 b=hello` -> {'a': 1.0, 'b': 'hello'}. Numbers are coerced."""
+    out: dict = {}
+    for tok in payload.split():
+        if "=" not in tok:
+            continue
+        k, v = tok.split("=", 1)
+        if not k:
+            continue
+        try:
+            out[k] = float(v)
+        except ValueError:
+            out[k] = v
+    return out
+
+
+# --------------------------------------------------------------------------
+# projects
+# --------------------------------------------------------------------------
+
+def load_projects() -> list[dict]:
+    """Every directory with a matching .ino, plus its manifest if it has one.
+
+    A sketch without a project.json still appears — titled from its folder name,
+    with no parts list and no readouts. Nothing breaks by omitting the manifest.
+    """
+    out: list[dict] = []
+    for d in sorted(HERE.iterdir()):
+        if not (d.is_dir() and (d / f"{d.name}.ino").exists()):
+            continue
+
+        manifest: dict = {}
+        mf = d / "project.json"
+        if mf.exists():
+            try:
+                loaded = json.loads(mf.read_text(encoding="utf-8"))
+                if isinstance(loaded, dict):
+                    manifest = loaded
+            except (OSError, ValueError):
+                pass  # a broken manifest degrades to the folder-name fallback
+
+        out.append({
+            "id": d.name,
+            "name": manifest.get("name") or d.name.replace("_", " ").title(),
+            "blurb": manifest.get("blurb", ""),
+            "kind": manifest.get("kind", "project"),
+            "lede": manifest.get("lede", ""),
+            "components": manifest.get("components", []),
+            "readouts": manifest.get("readouts", []),
+            "diagram": manifest.get("diagram"),
+            "custom": manifest.get("custom"),
+            "hasManifest": bool(manifest),
+        })
+    return out
 
 
 class Board:
@@ -49,6 +119,8 @@ class Board:
         self.ser: serial.Serial | None = None
         self.connected = False
         self.config: dict[str, str] = {}
+        self.values: dict = {}                    # latest telemetry, per key
+        self.ready: dict[str, bool] = {}          # latest `R` line
         self.history: deque[dict] = deque(maxlen=HISTORY)
         self.log: deque[str] = deque(maxlen=60)
         self._subs: set[queue.Queue] = set()
@@ -100,6 +172,8 @@ class Board:
             "health": self.health(),
             "port": self.port,
             "config": self.config,
+            "values": self.values,
+            "ready": self.ready,
             "history": list(self.history),
             "log": list(self.log),
         }
@@ -121,15 +195,40 @@ class Board:
         self.log.append(line)
         self.publish({"type": "log", "line": line})
 
+    def _telemetry(self, ms: int, values: dict) -> None:
+        self.values = values
+        self.history.append({"t": ms, "v": values})
+        self.last_telem = time.time()
+        self.publish({"type": "telemetry", "t": ms, "v": values})
+
     def _handle(self, line: str) -> None:
         m = TELEM_RE.match(line)
         if m:
-            ms, dist, zone = int(m.group(1)), float(m.group(2)), m.group(3)
-            point = {"t": ms, "d": None if dist >= NO_ECHO else dist, "z": zone}
-            self.history.append(point)
-            self.last_telem = time.time()
-            self.publish({"type": "telemetry", **point})
-            return
+            ms, rest = int(m.group(1)), m.group(2).strip()
+
+            if "=" in rest:                       # current form
+                self._telemetry(ms, parse_kv(rest))
+                return
+
+            lm = LEGACY_RE.match(line)            # legacy positional parking form
+            if lm:
+                dist = float(lm.group(2))
+                self._telemetry(ms, {
+                    "distance": None if dist >= NO_ECHO else dist,
+                    "zone": lm.group(3),
+                })
+                return
+            # `T ...` in a shape we don't know — fall through and just log it.
+
+        m = READY_RE.match(line)
+        if m:
+            flags = {k: (str(v).lower() in TRUTHY or v == 1.0)
+                     for k, v in parse_kv(m.group(1)).items()}
+            if flags:
+                self.ready = flags
+                self.publish({"type": "ready", "ready": flags})
+                self._note(line)
+                return
 
         m = CFG_RE.match(line)
         if m:
@@ -184,9 +283,14 @@ class Board:
             time.sleep(3.0)
             self.ser.reset_input_buffer()
             self.connected = True
+            self.values = {}
+            self.ready = {}
             self._note(f"# connected {self.port} @ {self.baud}")
             self.publish({"type": "status", "connected": True, "health": "silent"})
+            # Both are optional per PROTOCOL.md; a project that ignores them
+            # just answers ERR, which is harmless.
             self.send("GET")
+            self.send("CHECK")
 
             try:
                 # readline() returns after the 1s timeout with b"", so the
@@ -221,27 +325,6 @@ class Board:
 # flashing
 # --------------------------------------------------------------------------
 
-# Plain-language notes for the setup guide. `needed` marks the one sketch that
-# makes this website work; anything else is a detour.
-SKETCH_INFO = {
-    "parking_serial": {
-        "title": "Parking sensor + dashboard",
-        "blurb": "The full project. This is the one that talks to this website.",
-        "needed": True,
-    },
-    "parking_sensor": {
-        "title": "Parking sensor on its own",
-        "blurb": "Works by itself with the little screen, but this website won't be able to talk to it.",
-        "needed": False,
-    },
-    "blink": {
-        "title": "Blink test",
-        "blurb": "Just flashes the LED on and off. Handy for checking your LED is wired up right.",
-        "needed": False,
-    },
-}
-
-
 class Flasher:
     """Runs flash.ps1, handing the serial port over and back around it."""
 
@@ -250,29 +333,16 @@ class Flasher:
         self.port = port
         self.lock = threading.Lock()
         self.busy = False
-
-    def sketches(self) -> list[dict]:
-        out = []
-        for d in sorted(HERE.iterdir()):
-            if not (d.is_dir() and (d / f"{d.name}.ino").exists()):
-                continue
-            info = SKETCH_INFO.get(d.name, {})
-            out.append({
-                "name": d.name,
-                "title": info.get("title", d.name.replace("_", " ").title()),
-                "blurb": info.get("blurb", ""),
-                "needed": info.get("needed", False),
-            })
-        return out
+        self.active: str | None = None    # last project successfully flashed
 
     def _emit(self, line: str, kind: str = "line") -> None:
         self.board.publish({"type": "flash", "kind": kind, "line": line})
 
     def run(self, sketch: str) -> None:
         """Blocking; call on a worker thread."""
-        valid = {s["name"] for s in self.sketches()}
+        valid = {p["id"] for p in load_projects()}
         if sketch not in valid:
-            self._emit(f"'{sketch}' isn't one of the available sketches.", "error")
+            self._emit(f"'{sketch}' isn't one of the available projects.", "error")
             self._emit("", "done")
             return
 
@@ -307,7 +377,12 @@ class Flasher:
             code = proc.wait()
 
             if code == 0:
+                self.active = sketch
+                self.board.ready = {}
+                self.board.values = {}
+                self.board.history.clear()
                 self._emit("Done! Your Arduino is running the new code.", "ok")
+                self.board.publish({"type": "active", "active": sketch})
             else:
                 self._emit(f"That didn't work (error code {code}). The messages above say why.", "error")
 
@@ -356,9 +431,11 @@ def make_handler(board: Board, flasher: Flasher):
                 self._stream()
                 return
 
-            if self.path == "/api/sketches":
+            # /api/sketches is the old name; kept so a stale tab keeps working.
+            if self.path in ("/api/projects", "/api/sketches"):
                 body = json.dumps({
-                    "sketches": flasher.sketches(),
+                    "projects": load_projects(),
+                    "active": flasher.active,
                     "busy": flasher.busy,
                     "port": board.port,
                     "health": board.health(),
@@ -409,7 +486,9 @@ def make_handler(board: Board, flasher: Flasher):
             self.send_header("Connection", "keep-alive")
             self.end_headers()
             try:
-                self._emit(board.snapshot())
+                snap = board.snapshot()
+                snap["active"] = flasher.active
+                self._emit(snap)
                 while True:
                     try:
                         self._emit(q.get(timeout=15))
@@ -428,11 +507,26 @@ def make_handler(board: Board, flasher: Flasher):
     return Handler
 
 
+def lan_ip() -> str | None:
+    """Best-guess LAN address, for the 'open this on another machine' line."""
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("10.255.255.255", 1))   # no packet is sent
+        return s.getsockname()[0]
+    except OSError:
+        return None
+    finally:
+        s.close()
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--port", default="COM3", help="serial port (default COM3)")
     ap.add_argument("--baud", type=int, default=115200)
     ap.add_argument("--http-port", type=int, default=8787)
+    ap.add_argument("--host", default="0.0.0.0",
+                    help="bind address; 0.0.0.0 lets other machines connect "
+                         "(default), 127.0.0.1 keeps it to this one")
     ap.add_argument("--no-open", action="store_true", help="don't launch a browser")
     args = ap.parse_args()
 
@@ -440,14 +534,22 @@ def main() -> None:
     flasher = Flasher(board, args.port)
     threading.Thread(target=board.run, daemon=True).start()
 
-    url = f"http://127.0.0.1:{args.http_port}/"
-    httpd = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(board, flasher))
+    local = f"http://127.0.0.1:{args.http_port}/"
+    httpd = ThreadingHTTPServer((args.host, args.http_port), make_handler(board, flasher))
     httpd.daemon_threads = True
-    print(f"dashboard: {url}   (serial {args.port} @ {args.baud})")
+
+    found = [p["id"] for p in load_projects()]
+    print(f"dashboard: {local}   (serial {args.port} @ {args.baud})")
+    if args.host == "0.0.0.0":
+        ip = lan_ip()
+        if ip:
+            print(f"other machines: http://{ip}:{args.http_port}/")
+        print("anyone on this network can flash this board — use --host 127.0.0.1 to prevent that")
+    print(f"projects: {', '.join(found) or 'none found'}")
     print("Ctrl-C to stop. Stop this before running flash.ps1.")
 
     if not args.no_open:
-        threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+        threading.Timer(0.5, lambda: webbrowser.open(local)).start()
 
     try:
         httpd.serve_forever()
