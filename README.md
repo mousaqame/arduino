@@ -29,14 +29,24 @@ dashboard. Uses the toolchain that ships with Arduino IDE 1.8.16
 python dashboard.py
 ```
 
-Opens <http://127.0.0.1:8787> with a live distance readout, zone bar, rolling
-chart, threshold editors, and a serial log. Flags: `--port COM4`,
-`--http-port 9000`, `--no-open`.
+Opens <http://127.0.0.1:8787>. Two tabs:
 
-> The dashboard holds the serial port. Stop it before flashing, or the upload
-> fails with "access denied".
+- **Set it up** — a guided walkthrough for someone building this for the first
+  time: plug in, wire up (with a diagram), send the code, test it. Each step
+  reports its own state, so a wrong pin or missing board is visible rather than
+  mysterious.
+- **Live view** — distance readout, zone bar, rolling chart, threshold editors,
+  and a serial log.
+
+Flags: `--port COM4`, `--http-port 9000`, `--no-open`.
 
 ## Flashing
+
+Easiest from the **Set it up** tab — pick a sketch and press the button. The
+dashboard hands the serial port to avrdude and takes it back afterwards, so
+nothing needs stopping by hand.
+
+From a terminal instead:
 
 ```bash
 powershell -File flash.ps1 -Sketch parking_serial
@@ -44,6 +54,10 @@ powershell -File flash.ps1 -Sketch parking_serial
 
 Add `-VerifyOnly` to compile without touching the board. Other flags:
 `-Port COM4`, `-Fqbn arduino:avr:nano`, `-Mcu atmega328p`.
+
+> Only one process can hold a serial port. Running `flash.ps1` in a terminal
+> while the dashboard is up fails with "access denied" — use the Set it up tab,
+> or stop the dashboard first.
 
 ## Serial protocol
 

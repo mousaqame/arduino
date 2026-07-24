@@ -7,8 +7,12 @@ commands back to the board.
     python dashboard.py                 # COM3, http://127.0.0.1:8787
     python dashboard.py --port COM4 --http-port 9000 --no-open
 
-Note: only one process can hold the serial port. Stop this before running
-flash.ps1, or the upload will fail with "access denied".
+Also flashes sketches from the browser: it hands the serial port to avrdude for
+the upload and takes it back afterwards, so nothing needs stopping by hand.
+
+Note: only one process can hold a serial port. If you run flash.ps1 in a
+terminal while this is up, that upload will fail with "access denied" — use the
+Setup tab instead, or stop this first.
 """
 
 from __future__ import annotations
@@ -17,6 +21,7 @@ import argparse
 import json
 import queue
 import re
+import subprocess
 import threading
 import time
 import webbrowser
@@ -49,6 +54,10 @@ class Board:
         self._subs: set[queue.Queue] = set()
         self._lock = threading.Lock()
         self._wlock = threading.Lock()
+        # Flashing needs the port, so the reader has to be able to let go of it.
+        self._suspend = False
+        self._released = threading.Event()
+        self.last_telem = 0.0
 
     # -- pub/sub ----------------------------------------------------------
 
@@ -71,10 +80,24 @@ class Board:
             except queue.Full:
                 pass  # slow client; drop rather than stall the reader
 
+    def health(self) -> str:
+        """What the setup guide needs to know, in one word.
+
+        offline  — the port won't open: nothing plugged in, or something else has it
+        silent   — port opened, but no telemetry: wrong firmware on the board
+        ok       — telemetry arriving
+        """
+        if self._suspend:
+            return "busy"
+        if not self.connected:
+            return "offline"
+        return "ok" if (time.time() - self.last_telem) < 2.0 else "silent"
+
     def snapshot(self) -> dict:
         return {
             "type": "snapshot",
             "connected": self.connected,
+            "health": self.health(),
             "port": self.port,
             "config": self.config,
             "history": list(self.history),
@@ -104,6 +127,7 @@ class Board:
             ms, dist, zone = int(m.group(1)), float(m.group(2)), m.group(3)
             point = {"t": ms, "d": None if dist >= NO_ECHO else dist, "z": zone}
             self.history.append(point)
+            self.last_telem = time.time()
             self.publish({"type": "telemetry", **point})
             return
 
@@ -119,16 +143,40 @@ class Board:
 
         self._note(line)
 
+    # -- port hand-off ----------------------------------------------------
+
+    def suspend(self, timeout: float = 8.0) -> bool:
+        """Release the serial port so another process (avrdude) can take it.
+
+        Only sets a flag — the reader thread closes the port itself. Closing a
+        pyserial handle from another thread while readline() is blocked tears
+        down the Windows overlapped-IO state mid-read, which kills the reader
+        and takes the interpreter with it. The read timeout bounds the wait.
+        """
+        self._suspend = True
+        self._released.clear()
+        self.publish({"type": "status", "connected": False, "health": "busy"})
+        return self._released.wait(timeout)
+
+    def resume(self) -> None:
+        self._suspend = False
+
     def run(self) -> None:
         """Reader loop with reconnect."""
         while True:
+            if self._suspend:
+                self.connected = False
+                self._released.set()      # port is ours no longer
+                time.sleep(0.2)
+                continue
+
             try:
                 self.ser = serial.Serial(self.port, self.baud, timeout=1)
             except serial.SerialException as exc:
                 if self.connected or not self.log:
                     self._note(f"# cannot open {self.port}: {exc}")
                 self.connected = False
-                self.publish({"type": "status", "connected": False})
+                self.publish({"type": "status", "connected": False, "health": "offline"})
                 time.sleep(2.0)
                 continue
 
@@ -137,11 +185,13 @@ class Board:
             self.ser.reset_input_buffer()
             self.connected = True
             self._note(f"# connected {self.port} @ {self.baud}")
-            self.publish({"type": "status", "connected": True})
+            self.publish({"type": "status", "connected": True, "health": "silent"})
             self.send("GET")
 
             try:
-                while True:
+                # readline() returns after the 1s timeout with b"", so the
+                # suspend flag is noticed within about a second.
+                while not self._suspend:
                     raw = self.ser.readline()
                     if not raw:
                         continue
@@ -150,22 +200,139 @@ class Board:
                         self._handle(line)
             except serial.SerialException as exc:
                 self._note(f"# serial lost: {exc}")
+            except Exception as exc:           # never let the reader thread die
+                self._note(f"# reader error: {exc!r}")
             finally:
                 self.connected = False
-                self.publish({"type": "status", "connected": False})
+                self.publish({"type": "status", "connected": False,
+                              "health": "busy" if self._suspend else "offline"})
                 try:
-                    self.ser.close()
+                    self.ser.close()           # closed by its owning thread
                 except Exception:
                     pass
-                time.sleep(1.0)
+                self.ser = None
+                if self._suspend:
+                    self._released.set()       # port is genuinely free now
+                else:
+                    time.sleep(1.0)            # reconnect backoff
 
 
-def make_handler(board: Board):
+# --------------------------------------------------------------------------
+# flashing
+# --------------------------------------------------------------------------
+
+# Plain-language notes for the setup guide. `needed` marks the one sketch that
+# makes this website work; anything else is a detour.
+SKETCH_INFO = {
+    "parking_serial": {
+        "title": "Parking sensor + dashboard",
+        "blurb": "The full project. This is the one that talks to this website.",
+        "needed": True,
+    },
+    "parking_sensor": {
+        "title": "Parking sensor on its own",
+        "blurb": "Works by itself with the little screen, but this website won't be able to talk to it.",
+        "needed": False,
+    },
+    "blink": {
+        "title": "Blink test",
+        "blurb": "Just flashes the LED on and off. Handy for checking your LED is wired up right.",
+        "needed": False,
+    },
+}
+
+
+class Flasher:
+    """Runs flash.ps1, handing the serial port over and back around it."""
+
+    def __init__(self, board: Board, port: str):
+        self.board = board
+        self.port = port
+        self.lock = threading.Lock()
+        self.busy = False
+
+    def sketches(self) -> list[dict]:
+        out = []
+        for d in sorted(HERE.iterdir()):
+            if not (d.is_dir() and (d / f"{d.name}.ino").exists()):
+                continue
+            info = SKETCH_INFO.get(d.name, {})
+            out.append({
+                "name": d.name,
+                "title": info.get("title", d.name.replace("_", " ").title()),
+                "blurb": info.get("blurb", ""),
+                "needed": info.get("needed", False),
+            })
+        return out
+
+    def _emit(self, line: str, kind: str = "line") -> None:
+        self.board.publish({"type": "flash", "kind": kind, "line": line})
+
+    def run(self, sketch: str) -> None:
+        """Blocking; call on a worker thread."""
+        valid = {s["name"] for s in self.sketches()}
+        if sketch not in valid:
+            self._emit(f"'{sketch}' isn't one of the available sketches.", "error")
+            self._emit("", "done")
+            return
+
+        with self.lock:
+            if self.busy:
+                self._emit("Already sending code to the board — hang on.", "error")
+                return
+            self.busy = True
+
+        try:
+            self._emit("Letting go of the USB connection so we can send code…", "step")
+            if not self.board.suspend():
+                self._emit("Couldn't free the USB port. Try unplugging the board and plugging it back in.", "error")
+                return
+
+            time.sleep(0.4)   # let Windows fully release the handle
+            self._emit(f"Sending '{sketch}' to your Arduino. This takes about ten seconds.", "step")
+
+            proc = subprocess.Popen(
+                ["powershell", "-NoProfile", "-ExecutionPolicy", "Bypass",
+                 "-File", str(HERE / "flash.ps1"),
+                 "-Sketch", sketch, "-Port", self.port],
+                cwd=str(HERE),
+                stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                text=True, encoding="utf-8", errors="replace", bufsize=1,
+            )
+            assert proc.stdout is not None
+            for raw in proc.stdout:
+                line = raw.rstrip()
+                if line:
+                    self._emit(line)
+            code = proc.wait()
+
+            if code == 0:
+                self._emit("Done! Your Arduino is running the new code.", "ok")
+            else:
+                self._emit(f"That didn't work (error code {code}). The messages above say why.", "error")
+
+        except OSError as exc:
+            self._emit(f"Couldn't start the upload: {exc}", "error")
+        finally:
+            self.board.resume()
+            self.busy = False
+            self._emit("", "done")
+
+
+def make_handler(board: Board, flasher: Flasher):
     class Handler(BaseHTTPRequestHandler):
         protocol_version = "HTTP/1.1"
 
         def log_message(self, *_args):
             pass  # keep the console clean for board output
+
+        def handle_one_request(self):
+            # A browser closing a tab aborts its SSE socket; that is routine,
+            # not something to dump a traceback about.
+            try:
+                super().handle_one_request()
+            except (ConnectionResetError, BrokenPipeError):
+                self.close_connection = True
 
         def _send(self, code, body: bytes, ctype="text/plain; charset=utf-8"):
             self.send_response(code)
@@ -189,9 +356,34 @@ def make_handler(board: Board):
                 self._stream()
                 return
 
+            if self.path == "/api/sketches":
+                body = json.dumps({
+                    "sketches": flasher.sketches(),
+                    "busy": flasher.busy,
+                    "port": board.port,
+                    "health": board.health(),
+                }).encode()
+                self._send(200, body, "application/json")
+                return
+
             self._send(404, b"not found")
 
         def do_POST(self):
+            if self.path == "/api/flash":
+                length = int(self.headers.get("Content-Length", 0))
+                try:
+                    payload = json.loads(self.rfile.read(length) or b"{}")
+                    sketch = str(payload.get("sketch", "")).strip()
+                except (ValueError, UnicodeDecodeError):
+                    self._send(400, b'{"ok":false}', "application/json")
+                    return
+                if flasher.busy:
+                    self._send(409, b'{"ok":false,"error":"already flashing"}', "application/json")
+                    return
+                threading.Thread(target=flasher.run, args=(sketch,), daemon=True).start()
+                self._send(200, b'{"ok":true}', "application/json")
+                return
+
             if self.path != "/cmd":
                 self._send(404, b"not found")
                 return
@@ -245,10 +437,11 @@ def main() -> None:
     args = ap.parse_args()
 
     board = Board(args.port, args.baud)
+    flasher = Flasher(board, args.port)
     threading.Thread(target=board.run, daemon=True).start()
 
     url = f"http://127.0.0.1:{args.http_port}/"
-    httpd = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(board))
+    httpd = ThreadingHTTPServer(("127.0.0.1", args.http_port), make_handler(board, flasher))
     httpd.daemon_threads = True
     print(f"dashboard: {url}   (serial {args.port} @ {args.baud})")
     print("Ctrl-C to stop. Stop this before running flash.ps1.")

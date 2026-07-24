@@ -6,293 +6,656 @@
 <title>Parking Sensor</title>
 <style>
   :root {
-    --bg:      #0b0f14;
-    --panel:   #131a22;
-    --panel-2: #0f151c;
-    --line:    #22303d;
-    --text:    #e6edf3;
-    --muted:   #8b9bab;
+    --ground:#f3f6f6; --panel:#ffffff; --sunken:#e9efee;
+    --ink:#101a1c; --muted:#56696b; --line:#d5dedd;
+    --accent:#0e7c72; --accent-w:#0e7c7216;
 
-    --far:    #64748b;
-    --close:  #38bdf8;
-    --good:   #22c55e;
-    --vclose: #f59e0b;
-    --stop:   #ef4444;
+    --far:#64748b; --close:#0ea5e9; --good:#16a34a; --vclose:#d97706; --stop:#dc2626;
+    --wire-oled:#8b5cf6; --wire-sonic:#0ea5e9; --wire-led:#16a34a; --wire-buzz:#d97706;
+
+    --shadow:0 1px 2px rgba(16,26,28,.05), 0 8px 24px rgba(16,26,28,.06);
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --ground:#0a1013; --panel:#111a1c; --sunken:#0d1517;
+      --ink:#dfe9e9; --muted:#8a9c9e; --line:#1e2c2f;
+      --accent:#2dd4bf; --accent-w:#2dd4bf18;
+      --far:#7c8b9c; --close:#38bdf8; --good:#22c55e; --vclose:#f59e0b; --stop:#ef4444;
+      --wire-oled:#a78bfa; --wire-sonic:#38bdf8; --wire-led:#22c55e; --wire-buzz:#f59e0b;
+      --shadow:0 1px 2px rgba(0,0,0,.3), 0 8px 24px rgba(0,0,0,.25);
+    }
   }
 
-  * { box-sizing: border-box; }
+  * { box-sizing:border-box; }
 
   body {
-    margin: 0;
-    background: var(--bg);
-    color: var(--text);
-    font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
+    margin:0; background:var(--ground); color:var(--ink);
+    font:15.5px/1.65 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    -webkit-font-smoothing:antialiased;
   }
 
+  .wrap { max-width:1180px; margin:0 auto; padding:0 20px 72px; }
+
+  /* ---- header ---- */
   header {
-    display: flex; align-items: center; gap: 14px;
-    padding: 16px 22px;
-    border-bottom: 1px solid var(--line);
-    background: var(--panel-2);
+    display:flex; align-items:center; gap:16px; flex-wrap:wrap;
+    padding:22px 0 0;
   }
-  header h1 {
-    margin: 0; font-size: 15px; font-weight: 650;
-    letter-spacing: .14em; text-transform: uppercase;
-  }
-  .spacer { flex: 1; }
+  header h1 { margin:0; font-size:1.3rem; font-weight:670; letter-spacing:-.02em; }
+  .grow { flex:1; }
 
-  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
-  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stop); }
-  .dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34,197,94,.18); }
+  .status { display:flex; align-items:center; gap:8px; font-size:13px; color:var(--muted); }
+  .dot { width:9px; height:9px; border-radius:50%; background:var(--stop); flex:none; }
+  .dot.ok { background:var(--good); box-shadow:0 0 0 3px color-mix(in srgb, var(--good) 20%, transparent); }
+  .dot.warn { background:var(--vclose); }
 
-  main {
-    display: grid;
-    grid-template-columns: minmax(0,2fr) minmax(280px,1fr);
-    gap: 18px; padding: 18px; max-width: 1400px; margin: 0 auto;
+  .tabs { display:flex; gap:4px; margin:18px 0 22px; border-bottom:1px solid var(--line); }
+  .tab {
+    font:inherit; font-weight:560; cursor:pointer; background:none; border:none;
+    color:var(--muted); padding:10px 16px; border-bottom:2px solid transparent;
+    margin-bottom:-1px;
   }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .tab[aria-selected="true"] { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; border-radius:6px 6px 0 0; }
 
-  .panel {
-    background: var(--panel);
-    border: 1px solid var(--line);
-    border-radius: 12px;
-    padding: 18px;
-  }
-  .panel h2 {
-    margin: 0 0 14px; font-size: 11px; font-weight: 650;
-    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
-  }
-
-  /* readout */
-  .readout { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
-  .dist {
-    font-size: 76px; font-weight: 700; line-height: 1;
-    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
-  }
-  .unit { font-size: 22px; color: var(--muted); }
-  .badge {
-    margin-left: auto; padding: 8px 18px; border-radius: 999px;
-    font-size: 20px; font-weight: 700; letter-spacing: .04em;
-    background: #1e2936; color: var(--muted);
-    transition: background .15s, color .15s;
-  }
-  .sub { color: var(--muted); font-size: 12px; margin-top: 10px; }
-
-  /* proximity bar */
-  .bar { margin-top: 22px; }
-  .track {
-    position: relative; height: 26px; border-radius: 7px;
-    overflow: hidden; display: flex; border: 1px solid var(--line);
-  }
-  .track span { display: block; height: 100%; }
-  .marker {
-    position: absolute; top: -5px; width: 3px; height: 36px;
-    background: var(--text); border-radius: 2px;
-    box-shadow: 0 0 0 2px var(--panel);
-    transition: left .12s linear;
-  }
-  .ticks {
-    display: flex; justify-content: space-between;
-    color: var(--muted); font-size: 11px; margin-top: 7px;
-    font-variant-numeric: tabular-nums;
-  }
-
-  canvas { width: 100%; height: 190px; display: block; }
-
-  /* controls */
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  label.field { display: block; font-size: 11px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
-  label.field input {
-    width: 100%; margin-top: 5px; padding: 8px 10px;
-    background: var(--panel-2); border: 1px solid var(--line);
-    color: var(--text); border-radius: 7px; font: inherit;
-    font-variant-numeric: tabular-nums;
-  }
-  label.field input:focus { outline: none; border-color: var(--close); }
-
-  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
   button {
-    padding: 8px 14px; border-radius: 7px; font: inherit; font-weight: 550;
-    background: var(--panel-2); color: var(--text);
-    border: 1px solid var(--line); cursor: pointer;
-    transition: border-color .12s, background .12s;
+    font:inherit; font-weight:550; cursor:pointer; border-radius:8px;
+    border:1px solid var(--line); background:var(--panel); color:var(--ink);
+    padding:8px 15px; transition:border-color .12s, background .12s;
   }
-  button:hover { border-color: var(--muted); }
-  button:disabled { opacity: .4; cursor: not-allowed; }
-  button.active { border-color: var(--good); color: var(--good); }
-  button.warn.active { border-color: var(--vclose); color: var(--vclose); }
+  button:hover:not(:disabled) { border-color:var(--muted); }
+  button:disabled { opacity:.45; cursor:not-allowed; }
+  button:focus-visible { outline:2px solid var(--accent); outline-offset:2px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; }
+  @media (prefers-color-scheme: dark) { button.primary { color:#06302b; } }
+  button.primary:hover:not(:disabled) { filter:brightness(1.1); }
+  button.big { padding:12px 22px; font-size:1.02rem; font-weight:620; }
+  button.active { border-color:var(--good); color:var(--good); }
+  button.warn.active { border-color:var(--vclose); color:var(--vclose); }
+  button.sm { padding:6px 12px; font-size:13.5px; }
+
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:13px; padding:19px; }
+  .panel h2 {
+    margin:0 0 14px; font-size:11px; font-weight:660;
+    letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+  }
+
+  [hidden] { display:none !important; }
+
+  /* ================= SETUP ================= */
+
+  .lede { font-size:1.06rem; color:var(--muted); max-width:64ch; margin:0 0 26px; }
+
+  .steps { display:flex; flex-direction:column; gap:14px; }
+
+  .step {
+    display:grid; grid-template-columns:44px 1fr; gap:16px;
+    background:var(--panel); border:1px solid var(--line);
+    border-radius:13px; padding:19px; box-shadow:var(--shadow);
+  }
+  .step[data-state="done"] { border-color:color-mix(in srgb, var(--good) 45%, var(--line)); }
+  .step[data-state="doing"] { border-color:var(--accent); }
+
+  .bead {
+    width:34px; height:34px; border-radius:50%; display:grid; place-items:center;
+    font-weight:680; font-size:15px;
+    background:var(--sunken); color:var(--muted); border:1px solid var(--line);
+  }
+  .step[data-state="done"] .bead { background:var(--good); color:#fff; border-color:var(--good); }
+  .step[data-state="doing"] .bead { background:var(--accent); color:#fff; border-color:var(--accent); }
+  @media (prefers-color-scheme: dark) {
+    .step[data-state="done"] .bead { color:#052e16; }
+    .step[data-state="doing"] .bead { color:#06302b; }
+  }
+
+  .stepbody { display:flex; flex-direction:column; gap:10px; min-width:0; }
+  .step h3 { margin:0; font-size:1.1rem; font-weight:640; letter-spacing:-.01em; }
+  .step p { margin:0; max-width:66ch; }
+  .step p.hint { color:var(--muted); font-size:.94rem; }
+
+  .verdict {
+    display:inline-flex; align-items:center; gap:9px; align-self:flex-start;
+    padding:8px 14px; border-radius:9px; font-size:.94rem; font-weight:550;
+    background:var(--sunken); border:1px solid var(--line);
+  }
+  .verdict.good { color:var(--good); border-color:color-mix(in srgb, var(--good) 45%, var(--line)); }
+  .verdict.bad  { color:var(--stop); border-color:color-mix(in srgb, var(--stop) 45%, var(--line)); }
+  .verdict.wait { color:var(--vclose); border-color:color-mix(in srgb, var(--vclose) 45%, var(--line)); }
+
+  /* wiring diagram */
+  figure { margin:0; display:flex; flex-direction:column; gap:10px; }
+  .diagram { width:100%; background:var(--sunken); border:1px solid var(--line); border-radius:11px; }
+  .diagram svg { width:100%; height:auto; display:block; }
+  figcaption { font-size:.9rem; color:var(--muted); }
+
+  .tablewrap { overflow-x:auto; border:1px solid var(--line); border-radius:10px; }
+  table { border-collapse:collapse; width:100%; font-size:.92rem; }
+  th, td { text-align:left; padding:9px 14px; border-bottom:1px solid var(--line); }
+  th { font-size:10.5px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:650; }
+  tr:last-child td { border-bottom:none; }
+  td.pin { font-family:var(--mono); font-weight:600; white-space:nowrap; }
+  .swatch { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:8px; }
+
+  /* sketch picker */
+  .picks { display:flex; flex-direction:column; gap:8px; }
+  .pick {
+    display:flex; gap:12px; align-items:flex-start; cursor:pointer;
+    border:1px solid var(--line); border-radius:10px; padding:12px 15px;
+    background:var(--sunken);
+  }
+  .pick:hover { border-color:var(--muted); }
+  .pick:has(input:checked) { border-color:var(--accent); background:var(--accent-w); }
+  .pick input { margin:4px 0 0; accent-color:var(--accent); flex:none; }
+  .pick b { display:block; font-weight:620; }
+  .pick span { color:var(--muted); font-size:.92rem; }
+  .pick .tag {
+    font-size:10px; letter-spacing:.1em; text-transform:uppercase; font-weight:660;
+    color:var(--accent); border:1px solid currentColor; border-radius:999px;
+    padding:2px 8px; margin-left:8px; vertical-align:1px;
+  }
+
+  #flashlog {
+    margin:0; padding:12px 14px; max-height:220px; overflow-y:auto;
+    background:var(--sunken); border:1px solid var(--line); border-radius:9px;
+    font:12.5px/1.6 var(--mono); color:var(--muted);
+    white-space:pre-wrap; word-break:break-word;
+  }
+  #flashlog b { color:var(--ink); font-weight:600; }
+  #flashlog i { color:var(--stop); font-style:normal; font-weight:600; }
+  #flashlog u { color:var(--good); text-decoration:none; font-weight:600; }
+
+  .tryrow { display:flex; align-items:center; gap:18px; flex-wrap:wrap; }
+  .trynum {
+    font-size:2.6rem; font-weight:700; font-variant-numeric:tabular-nums;
+    line-height:1; letter-spacing:-.02em; min-width:3ch;
+  }
+
+  /* ================= MONITOR ================= */
+
+  .cols { display:grid; grid-template-columns:minmax(0,2fr) minmax(270px,1fr); gap:16px; }
+  @media (max-width:900px) { .cols { grid-template-columns:1fr; } }
+  .stack { display:flex; flex-direction:column; gap:16px; min-width:0; }
+
+  .readout { display:flex; align-items:baseline; gap:14px; flex-wrap:wrap; }
+  .dist { font-size:70px; font-weight:700; line-height:1; font-variant-numeric:tabular-nums; letter-spacing:-.025em; }
+  .unit { font-size:20px; color:var(--muted); }
+  .badge {
+    margin-left:auto; padding:8px 18px; border-radius:999px;
+    font-size:19px; font-weight:700; letter-spacing:.03em;
+    background:var(--sunken); color:var(--muted);
+  }
+  .sub { color:var(--muted); font-size:12.5px; margin-top:9px; }
+
+  .bar { margin-top:20px; }
+  .track { position:relative; height:26px; border-radius:7px; overflow:hidden; display:flex; border:1px solid var(--line); }
+  .track span { display:block; height:100%; }
+  .marker {
+    position:absolute; top:-5px; width:3px; height:36px; background:var(--ink);
+    border-radius:2px; box-shadow:0 0 0 2px var(--panel); transition:left .12s linear;
+  }
+  .ticks { display:flex; justify-content:space-between; color:var(--muted); font-size:11px; margin-top:7px; font-variant-numeric:tabular-nums; }
+
+  canvas { width:100%; height:185px; display:block; }
+
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:10px; }
+  label.field { display:block; font-size:10.5px; color:var(--muted); letter-spacing:.1em; text-transform:uppercase; }
+  label.field input {
+    width:100%; margin-top:5px; padding:8px 10px; font:inherit;
+    background:var(--sunken); border:1px solid var(--line); color:var(--ink);
+    border-radius:7px; font-variant-numeric:tabular-nums;
+  }
+  label.field input:focus { outline:none; border-color:var(--accent); }
+
+  .btns { display:flex; flex-wrap:wrap; gap:8px; margin-top:13px; }
 
   #log {
-    margin: 0; padding: 12px; height: 190px; overflow-y: auto;
-    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
-    font: 12px/1.65 ui-monospace, "Cascadia Mono", Consolas, monospace;
-    color: var(--muted); white-space: pre-wrap; word-break: break-word;
+    margin:0; padding:12px; height:185px; overflow-y:auto;
+    background:var(--sunken); border:1px solid var(--line); border-radius:8px;
+    font:12px/1.65 var(--mono); color:var(--muted);
+    white-space:pre-wrap; word-break:break-word;
   }
-  #log b { color: var(--text); font-weight: 500; }
-  #log i { color: var(--stop); font-style: normal; }
+  #log b { color:var(--ink); font-weight:500; }
+  #log i { color:var(--stop); font-style:normal; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
 <body>
 
-<header>
-  <h1>Parking Sensor</h1>
-  <div class="spacer"></div>
-  <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
-</header>
+<div class="wrap">
+  <header>
+    <h1>Parking Sensor</h1>
+    <div class="grow"></div>
+    <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
+  </header>
 
-<main>
-  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
-    <section class="panel">
-      <h2>Distance</h2>
-      <div class="readout">
-        <span class="dist" id="dist">—</span><span class="unit">cm</span>
-        <span class="badge" id="zone">—</span>
-      </div>
-      <div class="sub" id="sub">waiting for telemetry…</div>
+  <div class="tabs" role="tablist">
+    <button class="tab" id="tab-setup"   role="tab" aria-selected="true"  aria-controls="view-setup">Set it up</button>
+    <button class="tab" id="tab-monitor" role="tab" aria-selected="false" aria-controls="view-monitor">Live view</button>
+  </div>
 
-      <div class="bar">
-        <div class="track" id="track">
-          <span id="b-stop"></span><span id="b-vclose"></span><span id="b-good"></span>
-          <span id="b-close"></span><span id="b-far"></span>
-          <div class="marker" id="marker" style="left:0"></div>
+  <!-- ========================= SETUP ========================= -->
+  <section id="view-setup" role="tabpanel" aria-labelledby="tab-setup">
+    <p class="lede">
+      This little machine measures how far away something is and beeps faster as you get
+      closer — like the parking sensor in a car. Follow the four steps and it will be
+      working in a few minutes.
+    </p>
+
+    <div class="steps">
+
+      <!-- 1 -->
+      <div class="step" id="s1" data-state="todo">
+        <div class="bead">1</div>
+        <div class="stepbody">
+          <h3>Plug the Arduino into your computer</h3>
+          <p>Use the USB cable. The little green light on the board should come on.</p>
+          <div class="verdict" id="v1">Looking for your board…</div>
         </div>
-        <div class="ticks"><span>0</span><span id="tick-mid">—</span><span id="tick-max">—</span></div>
       </div>
-    </section>
 
-    <section class="panel">
-      <h2>History</h2>
-      <canvas id="chart"></canvas>
-    </section>
-  </div>
+      <!-- 2 -->
+      <div class="step" id="s2" data-state="todo">
+        <div class="bead">2</div>
+        <div class="stepbody">
+          <h3>Connect the parts</h3>
+          <p>
+            Four things plug into the Arduino. Each coloured line below is one connection —
+            match the pin number on the board to the part.
+          </p>
 
-  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
-    <section class="panel">
-      <h2>Thresholds (cm)</h2>
-      <div class="grid2">
-        <label class="field">Far    <input type="number" id="t-far"    min="1" max="400"></label>
-        <label class="field">Close  <input type="number" id="t-close"  min="1" max="400"></label>
-        <label class="field">Good   <input type="number" id="t-good"   min="1" max="400"></label>
-        <label class="field">V.Close<input type="number" id="t-vclose" min="1" max="400"></label>
+          <figure>
+            <div class="diagram">
+              <svg viewBox="0 0 660 380" role="img" aria-label="Wiring diagram: OLED screen to pins A4 and A5, distance sensor to pins 9 and 10, LED to pin 6, buzzer to pin 7.">
+                <!-- board -->
+                <rect x="34" y="70" width="150" height="250" rx="12"
+                      fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
+                <rect x="34" y="70" width="150" height="30" rx="12" fill="var(--accent)" opacity=".14"/>
+                <text x="109" y="90" text-anchor="middle" font-size="14" font-weight="650"
+                      fill="var(--ink)" font-family="ui-sans-serif, system-ui">Arduino Uno</text>
+
+                <!-- usb stub -->
+                <rect x="14" y="120" width="22" height="34" rx="4" fill="var(--muted)" opacity=".5"/>
+                <text x="25" y="172" text-anchor="middle" font-size="10" fill="var(--muted)"
+                      font-family="ui-sans-serif, system-ui">USB</text>
+
+                <!-- pin labels on the board -->
+                <g font-family="ui-monospace, Consolas, monospace" font-size="13" font-weight="650" fill="var(--ink)">
+                  <text x="170" y="130" text-anchor="end">A4 A5</text>
+                  <text x="170" y="185" text-anchor="end">9 · 10</text>
+                  <text x="170" y="240" text-anchor="end">6</text>
+                  <text x="170" y="292" text-anchor="end">7</text>
+                </g>
+
+                <!-- wires -->
+                <g fill="none" stroke-width="3" stroke-linecap="round">
+                  <path d="M184 125 C 270 125, 300 105, 386 105" stroke="var(--wire-oled)"/>
+                  <path d="M184 180 C 270 180, 300 190, 386 190" stroke="var(--wire-sonic)"/>
+                  <path d="M184 235 C 270 235, 300 265, 386 265" stroke="var(--wire-led)"/>
+                  <path d="M184 288 C 270 288, 300 325, 386 325" stroke="var(--wire-buzz)"/>
+                </g>
+
+                <!-- components -->
+                <g>
+                  <rect x="386" y="78" width="240" height="56" rx="10"
+                        fill="var(--panel)" stroke="var(--wire-oled)" stroke-width="1.5"/>
+                  <text x="404" y="102" font-size="14" font-weight="640" fill="var(--ink)"
+                        font-family="ui-sans-serif, system-ui">Little screen</text>
+                  <text x="404" y="121" font-size="11.5" fill="var(--muted)"
+                        font-family="ui-sans-serif, system-ui">shows the distance · pins A4 and A5</text>
+
+                  <rect x="386" y="163" width="240" height="56" rx="10"
+                        fill="var(--panel)" stroke="var(--wire-sonic)" stroke-width="1.5"/>
+                  <text x="404" y="187" font-size="14" font-weight="640" fill="var(--ink)"
+                        font-family="ui-sans-serif, system-ui">Distance sensor</text>
+                  <text x="404" y="206" font-size="11.5" fill="var(--muted)"
+                        font-family="ui-sans-serif, system-ui">the two silver eyes · pins 9 and 10</text>
+
+                  <rect x="386" y="240" width="240" height="50" rx="10"
+                        fill="var(--panel)" stroke="var(--wire-led)" stroke-width="1.5"/>
+                  <text x="404" y="262" font-size="14" font-weight="640" fill="var(--ink)"
+                        font-family="ui-sans-serif, system-ui">LED light</text>
+                  <text x="404" y="279" font-size="11.5" fill="var(--muted)"
+                        font-family="ui-sans-serif, system-ui">pin 6 · needs a resistor</text>
+
+                  <rect x="386" y="300" width="240" height="50" rx="10"
+                        fill="var(--panel)" stroke="var(--wire-buzz)" stroke-width="1.5"/>
+                  <text x="404" y="322" font-size="14" font-weight="640" fill="var(--ink)"
+                        font-family="ui-sans-serif, system-ui">Buzzer</text>
+                  <text x="404" y="339" font-size="11.5" fill="var(--muted)"
+                        font-family="ui-sans-serif, system-ui">makes the beeps · pin 7</text>
+                </g>
+              </svg>
+            </div>
+            <figcaption>
+              Every part also needs power: a red wire to <b>5V</b> and a black wire to <b>GND</b>
+              on the Arduino. Those are the same for all four parts, so they aren't drawn here.
+            </figcaption>
+          </figure>
+
+          <div class="tablewrap">
+            <table>
+              <thead><tr><th>Part</th><th>Arduino pin</th><th>What it does</th></tr></thead>
+              <tbody>
+                <tr><td><span class="swatch" style="background:var(--wire-oled)"></span>Little screen</td><td class="pin">A4, A5</td><td>Shows the distance in numbers</td></tr>
+                <tr><td><span class="swatch" style="background:var(--wire-sonic)"></span>Distance sensor</td><td class="pin">9, 10</td><td>Sends out a click and times the echo</td></tr>
+                <tr><td><span class="swatch" style="background:var(--wire-led)"></span>LED light</td><td class="pin">6</td><td>Lights up when something is close</td></tr>
+                <tr><td><span class="swatch" style="background:var(--wire-buzz)"></span>Buzzer</td><td class="pin">7</td><td>Beeps faster the closer you get</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <p class="hint">
+            Not sure the LED is in the right way round? Pick the <b>Blink test</b> in step 3 —
+            if the light flashes, it's wired correctly.
+          </p>
+        </div>
       </div>
-      <div class="btns">
-        <button id="save">Save to EEPROM</button>
-        <button id="reset">Defaults</button>
-      </div>
-    </section>
 
-    <section class="panel">
-      <h2>Control</h2>
-      <div class="btns">
-        <button id="mode"   class="warn">Mode: Auto</button>
-        <button id="mute"   class="warn">Mute: Off</button>
-        <button id="led"    disabled>LED Off</button>
-        <button id="buzz">Test beep</button>
-      </div>
-      <div class="sub">LED override needs Manual mode.</div>
-    </section>
+      <!-- 3 -->
+      <div class="step" id="s3" data-state="todo">
+        <div class="bead">3</div>
+        <div class="stepbody">
+          <h3>Send the code to the Arduino</h3>
+          <p>
+            The Arduino is empty until you give it instructions. Pick what you want it to do,
+            then press the button. It takes about ten seconds.
+          </p>
 
-    <section class="panel">
-      <h2>Serial log</h2>
-      <pre id="log"></pre>
-    </section>
-  </div>
-</main>
+          <div class="picks" id="picks"></div>
+
+          <div>
+            <button class="primary big" id="flash">Send it to my Arduino</button>
+          </div>
+
+          <pre id="flashlog" hidden></pre>
+          <div class="verdict" id="v3" hidden></div>
+        </div>
+      </div>
+
+      <!-- 4 -->
+      <div class="step" id="s4" data-state="todo">
+        <div class="bead">4</div>
+        <div class="stepbody">
+          <h3>Try it out</h3>
+          <p>Wave your hand in front of the distance sensor and watch the number change.</p>
+          <div class="tryrow">
+            <span class="trynum" id="trynum">—</span>
+            <span style="color:var(--muted)">cm away</span>
+          </div>
+          <div class="verdict" id="v4">Waiting for the sensor…</div>
+          <p class="hint">
+            Once it's working, open <b>Live view</b> at the top to see the graph and change
+            how close is "too close".
+          </p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================= MONITOR ========================= -->
+  <section id="view-monitor" role="tabpanel" aria-labelledby="tab-monitor" hidden>
+    <div class="cols">
+      <div class="stack">
+        <section class="panel">
+          <h2>Distance</h2>
+          <div class="readout">
+            <span class="dist" id="dist">—</span><span class="unit">cm</span>
+            <span class="badge" id="zone">—</span>
+          </div>
+          <div class="sub" id="sub">waiting for the board…</div>
+          <div class="bar">
+            <div class="track" id="track">
+              <span id="b-stop"></span><span id="b-vclose"></span><span id="b-good"></span>
+              <span id="b-close"></span><span id="b-far"></span>
+              <div class="marker" id="marker" style="left:0"></div>
+            </div>
+            <div class="ticks"><span>0</span><span id="tick-mid">—</span><span id="tick-max">—</span></div>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>History</h2>
+          <canvas id="chart"></canvas>
+        </section>
+      </div>
+
+      <div class="stack">
+        <section class="panel">
+          <h2>How close is too close (cm)</h2>
+          <div class="grid2">
+            <label class="field">Far     <input type="number" id="t-far"    min="1" max="400"></label>
+            <label class="field">Close   <input type="number" id="t-close"  min="1" max="400"></label>
+            <label class="field">Good    <input type="number" id="t-good"   min="1" max="400"></label>
+            <label class="field">V.Close <input type="number" id="t-vclose" min="1" max="400"></label>
+          </div>
+          <div class="btns">
+            <button id="save" class="sm">Remember these</button>
+            <button id="reset" class="sm">Back to normal</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Control</h2>
+          <div class="btns">
+            <button id="mode" class="warn sm">Mode: Auto</button>
+            <button id="mute" class="warn sm">Mute: Off</button>
+            <button id="led"  class="sm" disabled>LED Off</button>
+            <button id="buzz" class="sm">Test beep</button>
+          </div>
+          <div class="sub">Switch to Manual before turning the LED on by hand.</div>
+        </section>
+
+        <section class="panel">
+          <h2>Messages from the board</h2>
+          <pre id="log"></pre>
+        </section>
+      </div>
+    </div>
+  </section>
+</div>
 
 <script>
-const ZONES = ['STOP!', 'V.CLOSE', 'GOOD', 'CLOSE', 'FAR'];
-const COLOR = {
-  'FAR': 'var(--far)', 'CLOSE': 'var(--close)', 'GOOD': 'var(--good)',
-  'V.CLOSE': 'var(--vclose)', 'STOP!': 'var(--stop)'
-};
-const RAW = { 'FAR': '#64748b', 'CLOSE': '#38bdf8', 'GOOD': '#22c55e',
-              'V.CLOSE': '#f59e0b', 'STOP!': '#ef4444' };
-
 const $ = id => document.getElementById(id);
-let cfg = { far: 100, close: 50, good: 20, vclose: 10, muted: '0', mode: 'AUTO' };
-let history = [];
-let recent = [];      // last few valid readings, for the median
-let editing = null;   // don't clobber a threshold box while it's focused
 
-// --- command plumbing -----------------------------------------------------
+let cfg = { far:100, close:50, good:20, vclose:10, muted:'0', mode:'AUTO' };
+let history = [];
+let recent = [];
+let editing = null;
+let health = 'offline';
+let flashing = false;
+let seenLow = Infinity, seenHigh = -Infinity;   // proves the sensor actually responds
+let userPickedTab = false;
+
+// ---- helpers ------------------------------------------------------------
 
 async function send(cmd) {
   try {
     const r = await fetch('/cmd', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ cmd })
     });
-    if (!r.ok) addLog('# dashboard: board not connected', true);
-  } catch { addLog('# dashboard: request failed', true); }
+    if (!r.ok) addLog('# the board is not connected right now', true);
+  } catch { addLog('# could not reach the dashboard', true); }
 }
 
 function addLog(line, err) {
   const el = $('log');
   const near = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
-  const span = document.createElement(err || line.startsWith('ERR') ? 'i'
-                                    : line.startsWith('OK') ? 'b' : 'span');
+  const tag = err || line.startsWith('ERR') ? 'i' : line.startsWith('OK') ? 'b' : 'span';
+  const span = document.createElement(tag);
   span.textContent = line + '\n';
   el.appendChild(span);
   while (el.childNodes.length > 200) el.removeChild(el.firstChild);
   if (near) el.scrollTop = el.scrollHeight;
 }
 
-// --- rendering ------------------------------------------------------------
+// ---- tabs ---------------------------------------------------------------
+
+function showTab(which) {
+  const setup = which === 'setup';
+  $('tab-setup').setAttribute('aria-selected', setup);
+  $('tab-monitor').setAttribute('aria-selected', !setup);
+  $('view-setup').hidden = !setup;
+  $('view-monitor').hidden = setup;
+  if (!setup) dirty = true;
+}
+$('tab-setup').onclick   = () => { userPickedTab = true; showTab('setup'); };
+$('tab-monitor').onclick = () => { userPickedTab = true; showTab('monitor'); };
+
+// ---- setup steps --------------------------------------------------------
+
+function setStep(id, state) { $(id).dataset.state = state; }
+function verdict(id, cls, text) {
+  const el = $(id);
+  el.hidden = false;
+  el.className = 'verdict ' + cls;
+  el.textContent = text;
+}
+
+function renderSetup() {
+  // 1 — is the board there?
+  if (health === 'offline') {
+    setStep('s1', 'doing');
+    verdict('v1', 'bad', "I can't find an Arduino. Is the USB cable plugged in?");
+  } else {
+    setStep('s1', 'done');
+    verdict('v1', 'good', 'Found your Arduino.');
+  }
+
+  // 2 — wiring can't be checked automatically; it's a read-and-do step.
+  setStep('s2', health === 'ok' ? 'done' : (health === 'offline' ? 'todo' : 'doing'));
+
+  // 3 — has the right code been sent?
+  if (flashing) {
+    setStep('s3', 'doing');
+  } else if (health === 'ok') {
+    setStep('s3', 'done');
+    verdict('v3', 'good', 'The Arduino is running the right code.');
+  } else if (health === 'silent') {
+    setStep('s3', 'doing');
+    verdict('v3', 'wait', "Your board is plugged in but isn't talking yet — send it the code below.");
+  } else {
+    setStep('s3', 'todo');
+    $('v3').hidden = true;
+  }
+  $('flash').disabled = flashing || health === 'offline';
+
+  // 4 — is the sensor actually reacting?
+  const moved = (seenHigh - seenLow) > 5;
+  if (health !== 'ok') {
+    setStep('s4', 'todo');
+    verdict('v4', 'wait', 'Finish the steps above first.');
+  } else if (moved) {
+    setStep('s4', 'done');
+    verdict('v4', 'good', "It's working! The sensor is measuring properly.");
+  } else {
+    setStep('s4', 'doing');
+    verdict('v4', 'wait', 'Move your hand closer and further away to test it.');
+  }
+}
+
+// ---- flashing -----------------------------------------------------------
+
+async function loadSketches() {
+  const r = await fetch('/api/sketches');
+  const d = await r.json();
+  $('picks').innerHTML = d.sketches.map((s, i) => `
+    <label class="pick">
+      <input type="radio" name="sketch" value="${s.name}" ${s.needed ? 'checked' : ''}>
+      <span>
+        <b>${s.title}${s.needed ? '<span class="tag">use this one</span>' : ''}</b>
+        <span>${s.blurb}</span>
+      </span>
+    </label>`).join('');
+}
+
+function flashLine(kind, line) {
+  const el = $('flashlog');
+  el.hidden = false;
+  const tag = kind === 'error' ? 'i' : kind === 'ok' ? 'u' : kind === 'step' ? 'b' : 'span';
+  const node = document.createElement(tag);
+  node.textContent = line + '\n';
+  el.appendChild(node);
+  el.scrollTop = el.scrollHeight;
+}
+
+$('flash').onclick = async () => {
+  const pick = document.querySelector('input[name=sketch]:checked');
+  if (!pick) return;
+  flashing = true;
+  seenLow = Infinity; seenHigh = -Infinity;
+  $('flashlog').textContent = '';
+  $('flashlog').hidden = false;
+  $('v3').hidden = true;
+  $('flash').textContent = 'Sending…';
+  renderSetup();
+  const r = await fetch('/api/flash', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ sketch: pick.value })
+  });
+  if (!r.ok) { flashing = false; $('flash').textContent = 'Send it to my Arduino'; renderSetup(); }
+};
+
+// ---- monitor rendering --------------------------------------------------
+
+const COLOR = { 'FAR':'var(--far)', 'CLOSE':'var(--close)', 'GOOD':'var(--good)',
+                'V.CLOSE':'var(--vclose)', 'STOP!':'var(--stop)' };
+const RAW = { 'FAR':'#64748b', 'CLOSE':'#0ea5e9', 'GOOD':'#16a34a',
+              'V.CLOSE':'#d97706', 'STOP!':'#dc2626' };
 
 function maxRange() { return Math.max(120, Math.round(cfg.far * 1.4)); }
 
 function renderBands() {
   const max = maxRange();
   const pct = v => (Math.min(v, max) / max * 100) + '%';
-  const stops = [
-    ['b-stop',   cfg.vclose,            RAW['STOP!']],
-    ['b-vclose', cfg.good - cfg.vclose, RAW['V.CLOSE']],
-    ['b-good',   cfg.close - cfg.good,  RAW['GOOD']],
-    ['b-close',  cfg.far - cfg.close,   RAW['CLOSE']],
-    ['b-far',    max - cfg.far,         RAW['FAR']],
-  ];
-  for (const [id, width, color] of stops) {
+  [['b-stop', cfg.vclose, RAW['STOP!']],
+   ['b-vclose', cfg.good - cfg.vclose, RAW['V.CLOSE']],
+   ['b-good', cfg.close - cfg.good, RAW['GOOD']],
+   ['b-close', cfg.far - cfg.close, RAW['CLOSE']],
+   ['b-far', max - cfg.far, RAW['FAR']]
+  ].forEach(([id, w, c]) => {
     const el = $(id);
-    el.style.width = pct(Math.max(0, width));
-    el.style.background = color;
+    el.style.width = pct(Math.max(0, w));
+    el.style.background = c;
     el.style.opacity = .8;
-  }
+  });
   $('tick-mid').textContent = Math.round(max / 2);
   $('tick-max').textContent = max;
 }
 
-function median(xs) {
-  const s = [...xs].sort((a, b) => a - b);
-  return s[Math.floor(s.length / 2)];
-}
+const median = xs => [...xs].sort((a,b) => a-b)[Math.floor(xs.length/2)];
 
 function renderReading(d, zone) {
   if (d === null) {
     $('dist').textContent = '—';
-    $('sub').textContent = 'no echo — nothing within range';
-    $('marker').style.opacity = '0';   // not 0 cm; hide rather than point at STOP
+    $('sub').textContent = 'nothing in range';
+    $('marker').style.opacity = '0';
+    $('trynum').textContent = '—';
     recent = [];
   } else {
     recent.push(d);
     if (recent.length > 3) recent.shift();
     const m = median(recent);
     $('dist').textContent = m.toFixed(0);
+    $('trynum').textContent = m.toFixed(0);
     $('sub').textContent = `raw ${d.toFixed(1)} cm · median of last ${recent.length}`;
     $('marker').style.opacity = '1';
     $('marker').style.left = (Math.min(d, maxRange()) / maxRange() * 100) + '%';
+    seenLow = Math.min(seenLow, d);
+    seenHigh = Math.max(seenHigh, d);
   }
   $('zone').textContent = zone;
-  $('zone').style.background = COLOR[zone] || '#1e2936';
-  $('zone').style.color = zone === 'FAR' ? '#e6edf3' : '#08111a';
-  $('dist').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--text)';
+  $('zone').style.background = COLOR[zone] || 'var(--sunken)';
+  $('zone').style.color = zone === 'FAR' ? '#fff' : '#08111a';
+  $('dist').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--ink)';
+  $('trynum').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--ink)';
 }
 
 function renderConfig() {
-  for (const k of ['far', 'close', 'good', 'vclose']) {
+  for (const k of ['far','close','good','vclose'])
     if (editing !== k) $('t-' + k).value = cfg[k];
-  }
   const manual = cfg.mode === 'MANUAL';
   $('mode').textContent = 'Mode: ' + (manual ? 'Manual' : 'Auto');
   $('mode').classList.toggle('active', manual);
@@ -304,23 +667,21 @@ function renderConfig() {
 }
 
 function drawChart() {
-  const cv = $('chart'), ctx = cv.getContext('2d');
+  const cv = $('chart');
+  if (!cv.clientWidth) return;              // hidden tab has no size
+  const ctx = cv.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
-  if (cv.width !== w * dpr || cv.height !== h * dpr) {
-    cv.width = w * dpr; cv.height = h * dpr;
-  }
+  if (cv.width !== w*dpr || cv.height !== h*dpr) { cv.width = w*dpr; cv.height = h*dpr; }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   ctx.clearRect(0, 0, w, h);
 
   const max = maxRange();
   const y = v => h - (Math.min(v, max) / max) * h;
 
-  // threshold guides
-  ctx.setLineDash([3, 4]);
-  ctx.lineWidth = 1;
-  for (const [k, c] of [['far', RAW['CLOSE']], ['close', RAW['GOOD']],
-                        ['good', RAW['V.CLOSE']], ['vclose', RAW['STOP!']]]) {
+  ctx.setLineDash([3,4]); ctx.lineWidth = 1;
+  for (const [k,c] of [['far',RAW['CLOSE']],['close',RAW['GOOD']],
+                       ['good',RAW['V.CLOSE']],['vclose',RAW['STOP!']]]) {
     ctx.strokeStyle = c; ctx.globalAlpha = .35;
     ctx.beginPath(); ctx.moveTo(0, y(cfg[k])); ctx.lineTo(w, y(cfg[k])); ctx.stroke();
   }
@@ -329,68 +690,91 @@ function drawChart() {
   if (history.length < 2) return;
   const n = Math.min(history.length, 240);
   const pts = history.slice(-n);
-  const x = i => (i / (n - 1)) * w;
+  const x = i => (i / (n-1)) * w;
 
-  ctx.lineWidth = 2;
-  ctx.lineJoin = 'round';
-  ctx.strokeStyle = RAW[pts[pts.length - 1].z] || '#e6edf3';
+  ctx.lineWidth = 2; ctx.lineJoin = 'round';
+  ctx.strokeStyle = RAW[pts[pts.length-1].z] || 'var(--ink)';
   ctx.beginPath();
   let pen = false;
-  pts.forEach((p, i) => {
+  pts.forEach((p,i) => {
     if (p.d === null) { pen = false; return; }
-    if (!pen) { ctx.moveTo(x(i), y(p.d)); pen = true; }
-    else ctx.lineTo(x(i), y(p.d));
+    if (!pen) { ctx.moveTo(x(i), y(p.d)); pen = true; } else ctx.lineTo(x(i), y(p.d));
   });
   ctx.stroke();
 }
 
-// --- events ---------------------------------------------------------------
+// ---- stream -------------------------------------------------------------
 
-const es = new EventSource('/stream');
 let dirty = false;
+const es = new EventSource('/stream');
 
 es.onmessage = e => {
   const m = JSON.parse(e.data);
+
   if (m.type === 'snapshot') {
-    setConn(m.connected);
+    setConn(m.connected, m.health);
     if (m.config && Object.keys(m.config).length) applyCfg(m.config);
     history = m.history || [];
     $('log').textContent = '';
     (m.log || []).forEach(l => addLog(l));
     const last = history[history.length - 1];
     if (last) renderReading(last.d, last.z);
+    if (!userPickedTab) showTab(m.health === 'ok' ? 'monitor' : 'setup');
     dirty = true;
+
   } else if (m.type === 'telemetry') {
-    history.push({ t: m.t, d: m.d, z: m.z });
+    history.push({ t:m.t, d:m.d, z:m.z });
     if (history.length > 240) history.shift();
     renderReading(m.d, m.z);
+    if (health !== 'ok') { health = 'ok'; setConn(true, 'ok'); }
     dirty = true;
+
   } else if (m.type === 'config') {
     applyCfg(m.config);
+
   } else if (m.type === 'status') {
-    setConn(m.connected);
+    setConn(m.connected, m.health);
+
+  } else if (m.type === 'flash') {
+    if (m.kind === 'done') {
+      flashing = false;
+      $('flash').textContent = 'Send it to my Arduino';
+    } else if (m.line) {
+      flashLine(m.kind, m.line);
+    }
+    renderSetup();
+
   } else if (m.type === 'log') {
     addLog(m.line);
   }
 };
-es.onerror = () => setConn(false);
+es.onerror = () => setConn(false, 'offline');
 
 function applyCfg(c) {
-  for (const k of ['far', 'close', 'good', 'vclose']) {
+  for (const k of ['far','close','good','vclose'])
     if (c[k] !== undefined) cfg[k] = parseInt(c[k], 10);
-  }
   if (c.muted !== undefined) cfg.muted = c.muted;
   if (c.mode !== undefined) cfg.mode = c.mode;
   renderConfig();
   dirty = true;
 }
 
-function setConn(ok) {
-  $('dot').classList.toggle('on', !!ok);
-  $('conn').textContent = ok ? 'COM3 connected' : 'disconnected';
+function setConn(ok, h) {
+  if (h) health = h;
+  else health = ok ? 'silent' : 'offline';
+  const dot = $('dot');
+  dot.classList.toggle('ok', health === 'ok');
+  dot.classList.toggle('warn', health === 'silent' || health === 'busy');
+  $('conn').textContent =
+    health === 'ok'      ? 'connected' :
+    health === 'silent'  ? 'plugged in, no code yet' :
+    health === 'busy'    ? 'sending code…' : 'no board found';
+  renderSetup();
 }
 
-for (const k of ['far', 'close', 'good', 'vclose']) {
+// ---- monitor controls ---------------------------------------------------
+
+for (const k of ['far','close','good','vclose']) {
   const el = $('t-' + k);
   el.addEventListener('focus', () => editing = k);
   el.addEventListener('blur', () => editing = null);
@@ -400,26 +784,41 @@ for (const k of ['far', 'close', 'good', 'vclose']) {
   });
 }
 
-$('mode').onclick = () => send('MODE ' + (cfg.mode === 'MANUAL' ? 'AUTO' : 'MANUAL'));
-$('mute').onclick = () => send('MUTE ' + (cfg.muted === '1' ? 'OFF' : 'ON'));
-$('buzz').onclick = () => send('BUZZ 1200 150');
-$('save').onclick = () => send('SAVE');
+$('mode').onclick  = () => send('MODE ' + (cfg.mode === 'MANUAL' ? 'AUTO' : 'MANUAL'));
+$('mute').onclick  = () => send('MUTE ' + (cfg.muted === '1' ? 'OFF' : 'ON'));
+$('buzz').onclick  = () => send('BUZZ 1200 150');
+$('save').onclick  = () => send('SAVE');
 $('reset').onclick = () => send('RESET');
 
 let ledOn = false;
-$('led').onclick = () => { ledOn = !ledOn; send('LED ' + (ledOn ? 'ON' : 'OFF'));
-                           $('led').textContent = 'LED ' + (ledOn ? 'On' : 'Off');
-                           $('led').classList.toggle('active', ledOn); };
+$('led').onclick = () => {
+  ledOn = !ledOn;
+  send('LED ' + (ledOn ? 'ON' : 'OFF'));
+  $('led').textContent = 'LED ' + (ledOn ? 'On' : 'Off');
+  $('led').classList.toggle('active', ledOn);
+};
 
-// Repaint on a frame timer rather than per-message, so a fast board can't
-// out-run the renderer.
+// ---- loop ---------------------------------------------------------------
+
 function tick() {
-  if (dirty) { drawChart(); dirty = false; }
+  if (dirty && !$('view-monitor').hidden) { drawChart(); dirty = false; }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
 window.addEventListener('resize', () => dirty = true);
+
+// The board goes quiet without disconnecting when the wrong sketch is loaded,
+// so re-evaluate health on a timer rather than only on incoming messages.
+setInterval(() => {
+  const last = history[history.length - 1];
+  const stale = !last || (performance.now() - (window._lastRx || 0)) > 2500;
+  if (stale && health === 'ok' && !flashing) { health = 'silent'; setConn(true, 'silent'); }
+}, 1500);
+es.addEventListener('message', () => window._lastRx = performance.now());
+
+loadSketches();
 renderConfig();
+renderSetup();
 </script>
 </body>
 </html>
