@@ -12,3 +12,8 @@ __pycache__/
 
 # WiFi credentials — the robot reads these, they never leave this machine
 robot/robot/secrets.h
+
+# Vercel's local project link, written by `vercel` in web/. Machine-specific,
+# and there is no reason for it to be in a public repo.
+.vercel/
+**/.vercel/
