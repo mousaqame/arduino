@@ -14,14 +14,13 @@
     "Piezo buzzer — + to pin 7, - to GND"
   ],
   "docs": [
-    { "label": "Build guide", "path": "docs/guide.html" },
+    { "label": "How it was built", "path": "docs/guide.html" },
     { "label": "Readme", "path": "README.md" },
-    { "label": "Guide (markdown)", "path": "BUILD-GUIDE.md" },
     { "label": "Firmware", "path": "parking_serial/parking_serial.ino" }
   ],
   "apps": [
     {
-      "label": "Live dashboard",
+      "label": "Build it & control it",
       "cmd": ["python", "dashboard.py", "--no-open"],
       "port": 8787
     }
