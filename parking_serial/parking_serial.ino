@@ -4,11 +4,15 @@
 // are replaced with millis() timing so serial stays responsive, and thresholds
 // can be retuned live from the PC.
 //
-// Telemetry out (every TELEMETRY_MS):  T <millis> <distance_cm> <state>
+// Telemetry out (every TELEMETRY_MS):  T <millis> distance=<cm> zone=<state>
+// Wiring report:                       R oled=<0|1> sonic=<0|1>
 // Replies:                             OK ... / ERR ... / # <info>
+//
+// See PROTOCOL.md - this sketch is the reference implementation of both lines.
 //
 // Commands in (newline terminated, case-insensitive):
 //   PING                  -> OK PONG
+//   CHECK                 -> re-send the R wiring report
 //   GET                   -> dump current config
 //   SET <ZONE> <cm>       ZONE = FAR|CLOSE|GOOD|VCLOSE
 //   MODE AUTO|MANUAL      MANUAL freezes the parking logic's LED/buzzer control
@@ -63,6 +67,19 @@ Zone          lastZone    = Z_FAR;
 bool          manualMode  = false;
 bool          manualLed   = false;
 
+// Wiring report. Only parts the board can actually sense are reported: the
+// OLED answers on I2C, and the ultrasonic proves itself by returning an echo.
+// The LED and buzzer are write-only pins with nothing to read back, so they
+// are left out of the R line entirely - the dashboard shows them as "can't
+// check", which is honest. Use the blink sketch to verify the LED.
+bool          oledOk      = false;
+bool          sonicSeen   = false;   // latches on the first real echo
+
+// Defined further down, but called from setup() and measure(). Arduino's
+// auto-prototyping would usually cover this; being explicit is cheaper than
+// debugging why it didn't.
+void sendReady();
+
 unsigned long lastMeasure = 0;
 unsigned long lastTelem   = 0;
 unsigned long lastDisplay = 0;
@@ -106,22 +123,29 @@ void setup() {
   EEPROM.get(EEPROM_ADDR, cfg);
   if (cfg.magic != EEPROM_MAGIC) loadDefaults();
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("ERR oled init failed"));
-    while (1);
-  }
-  Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
+  // A loose screen wire used to stop here forever (while(1)). From the PC that
+  // looks exactly like "no code on the board", which sends you hunting the
+  // wrong problem - and the sensor, LED and buzzer all work fine without a
+  // screen. So carry on and report it in the R line instead.
+  oledOk = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(2);
-  display.setCursor(15, 8);
-  display.println(F("READY"));
-  display.display();
-  delay(2000);
+  if (oledOk) {
+    Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
+
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(15, 8);
+    display.println(F("READY"));
+    display.display();
+    delay(2000);
+  } else {
+    Serial.println(F("# no screen found at 0x3C - running without it"));
+  }
 
   Serial.println(F("# parking_serial ready"));
   printConfig();
+  sendReady();
 }
 
 // ---- measurement ---------------------------------------------------------
@@ -134,6 +158,13 @@ void measure() {
   digitalWrite(trigPin, LOW);
 
   long duration = pulseIn(echoPin, HIGH, 30000);
+
+  // An echo is the only proof the sensor is really wired. It can't be checked
+  // once in setup(): pointed at open space it legitimately reads nothing, and
+  // reporting "not found" for a correctly wired sensor is worse than waiting.
+  // So it latches on the first real echo and re-reports the moment it does.
+  if (duration != 0 && !sonicSeen) { sonicSeen = true; sendReady(); }
+
   distance = (duration == 0) ? NO_ECHO : duration * 0.0343 / 2;
 
   if      (distance > cfg.farCm)    zone = Z_FAR;
@@ -202,6 +233,7 @@ void serviceBuzzer(unsigned long now) {
 }
 
 void drawDisplay() {
+  if (!oledOk) return;
   display.clearDisplay();
 
   display.setTextSize(1);
@@ -231,6 +263,14 @@ void printConfig() {
   Serial.print(F(" mode="));      Serial.println(manualMode ? F("MANUAL") : F("AUTO"));
 }
 
+// The dashboard flushes the serial buffer a few seconds after opening the port,
+// which swallows whatever setup() printed - so it asks for this again with
+// CHECK once it's listening. Also re-sent whenever a flag actually changes.
+void sendReady() {
+  Serial.print(F("R oled="));   Serial.print(oledOk ? 1 : 0);
+  Serial.print(F(" sonic="));   Serial.println(sonicSeen ? 1 : 0);
+}
+
 void warnIfUnordered() {
   if (!(cfg.farCm > cfg.closeCm && cfg.closeCm > cfg.goodCm && cfg.goodCm > cfg.vcloseCm))
     Serial.println(F("# warn thresholds not descending, some zones unreachable"));
@@ -247,8 +287,9 @@ void handleCommand(char *line) {
   char *cmd = strtok(line, " ");
   if (!cmd) return;
 
-  if (!strcasecmp(cmd, "PING")) { Serial.println(F("OK PONG")); return; }
-  if (!strcasecmp(cmd, "GET"))  { printConfig(); return; }
+  if (!strcasecmp(cmd, "PING"))  { Serial.println(F("OK PONG")); return; }
+  if (!strcasecmp(cmd, "CHECK")) { sendReady(); return; }
+  if (!strcasecmp(cmd, "GET"))   { printConfig(); return; }
 
   if (!strcasecmp(cmd, "SET")) {
     char *what = strtok(NULL, " ");
@@ -343,12 +384,14 @@ void serviceSerial() {
   }
 }
 
+// key=value, not positional - the dashboard reads the keys, so this is what
+// lets one Live view serve every project. Copy this shape into new sketches.
 void sendTelemetry(unsigned long now) {
   Serial.print(F("T "));
   Serial.print(now);
-  Serial.print(' ');
+  Serial.print(F(" distance="));
   Serial.print(distance, 1);
-  Serial.print(' ');
+  Serial.print(F(" zone="));
   Serial.println(zoneName(zone));
 }
 

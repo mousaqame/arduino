@@ -38,7 +38,18 @@ Opens <http://127.0.0.1:8787>. Two tabs:
 - **Live view** — distance readout, zone bar, rolling chart, threshold editors,
   and a serial log.
 
-Flags: `--port COM4`, `--http-port 9000`, `--no-open`.
+It serves every project in this repo, not just this one — the picker at the top
+switches between them, and each one's parts and readings come from its own
+`project.json`.
+
+Flags: `--port COM4`, `--http-port 9000`, `--no-open`, `--host 127.0.0.1`.
+
+By default it binds `0.0.0.0`, so another machine on the same network can open
+it at the LAN address printed on startup — **and anyone there can flash the
+board.** Pass `--host 127.0.0.1` to keep it to this machine.
+
+Two boards on one PC? Run a second copy: `python dashboard.py --port COM4
+--http-port 8788`. One process holds one serial port.
 
 ## Flashing
 
@@ -61,18 +72,35 @@ Add `-VerifyOnly` to compile without touching the board. Other flags:
 
 ## Serial protocol
 
-115200 baud. Telemetry streams at 10 Hz:
+115200 baud. Telemetry streams at 10 Hz, and the board reports its own wiring:
 
 ```
-T <millis> <distance_cm> <zone>     e.g.  T 12345 42.5 GOOD
+T <millis> distance=<cm> zone=<state>   e.g.  T 12345 distance=42.5 zone=GOOD
+R oled=<0|1> sonic=<0|1>                e.g.  R oled=1 sonic=0
 ```
 
 `distance` is `999.0` when the sensor gets no echo. Replies are `OK ...`,
 `ERR ...`, or `# ...` for informational lines.
 
+The `R` line is what drives the dashboard's wiring check. Only parts the board
+can actually sense appear in it: the screen answers on I2C, and the ultrasonic
+proves itself by returning an echo (so `sonic` starts at `0` and latches to `1`
+on the first real reading). The LED and buzzer are write-only pins with nothing
+to read back, so they are deliberately absent rather than faked — use the blink
+sketch to check the LED.
+
+**Both lines are a shared contract, not private to this sketch.** Any project
+that follows them gets the dashboard's picker, wiring check and live charts for
+free — see [PROTOCOL.md](PROTOCOL.md).
+
+> Missing screen? The board used to stop dead in `setup()`, which from the PC
+> is indistinguishable from having no code on it. It now carries on without the
+> screen and reports `oled=0`.
+
 | Command | Effect |
 | --- | --- |
 | `PING` | `OK PONG` |
+| `CHECK` | re-send the `R` wiring report |
 | `GET` | dump current config |
 | `SET <FAR\|CLOSE\|GOOD\|VCLOSE> <cm>` | retune a zone threshold (1–400) |
 | `MODE <AUTO\|MANUAL>` | MANUAL freezes the parking logic's LED/buzzer control |
