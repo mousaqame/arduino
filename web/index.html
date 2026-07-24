@@ -3,32 +3,41 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>The Workshop — build these with your own Arduino</title>
-<meta name="description" content="Five Arduino projects you can build, with the code flashed straight from your browser.">
+<title>Robonamix Workshop — build these with your own Arduino</title>
+<meta name="description" content="Five Arduino projects you can build, with the code flashed straight from your browser. No downloads, no Arduino IDE. From the Robonamix studio.">
+<link rel="icon" href="robonamix-icon.png" type="image/png">
+<link rel="apple-touch-icon" href="robonamix-icon.png">
 <style>
+  /* Robonamix brand tokens. Kept in step with the marketing site's
+     src/app/globals.css - if the brand shifts there, mirror it here.
+     Light-only on purpose: the Robonamix register is a warm light surface,
+     so this commits to one look rather than inventing a dark variant. */
   :root{
-    --ground:#f3f6f6; --panel:#fff; --sunken:#e9efee; --ink:#101a1c;
-    --muted:#56696b; --line:#d5dedd; --accent:#0e7c72;
+    --ground:#fafaf7; --panel:#fff; --sunken:#f3f1ea; --ink:#1a1a1a;
+    --muted:#5c5b56; --line:#e8e6df; --accent:#8b5fff;
+    --brand-from:#ff6da6; --brand-via:#8b5fff; --brand-to:#4a78ff;
+    --brand-gradient:linear-gradient(90deg,var(--brand-from),var(--brand-via),var(--brand-to));
+    --coral:#ff6b4a;
     --good:#16a34a; --warn:#d97706; --bad:#dc2626;
-    --shadow:0 1px 2px rgba(16,26,28,.05), 0 10px 30px rgba(16,26,28,.06);
+    --shadow:0 1px 2px rgba(26,26,26,.04), 0 10px 30px rgba(26,26,26,.06);
     --mono: ui-monospace,"Cascadia Mono",Consolas,monospace;
-  }
-  @media (prefers-color-scheme: dark){
-    :root{
-      --ground:#0a1013; --panel:#111a1c; --sunken:#0d1517; --ink:#e0eaea;
-      --muted:#8a9c9e; --line:#1e2c2f; --accent:#2dd4bf;
-      --good:#22c55e; --warn:#f59e0b; --bad:#ef4444;
-      --shadow:0 1px 2px rgba(0,0,0,.3), 0 10px 30px rgba(0,0,0,.25);
-    }
   }
   *{box-sizing:border-box}
   body{margin:0;background:var(--ground);color:var(--ink);
        font:16px/1.65 ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
   .wrap{max-width:1060px;margin:0 auto;padding:0 22px 80px}
 
-  header{padding:56px 0 30px}
+  header{padding:44px 0 30px}
+  .brandbar{display:flex;align-items:center;gap:14px;margin:0 0 30px}
+  .brandbar img{height:56px;width:auto;display:block}
+  @media (max-width:560px){ .brandbar img{height:44px} }
+  .brandbar .rule{flex:1;height:3px;border-radius:2px;background:var(--brand-gradient);opacity:.9}
   .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
            color:var(--accent);margin:0 0 14px}
+  /* The wordmark's gradient, reused once on the headline. Once is the point -
+     the brand reads as an accent, not as a texture over the whole page. */
+  h1 .grad{background:var(--brand-gradient);-webkit-background-clip:text;background-clip:text;
+           color:transparent}
   h1{margin:0 0 14px;font-size:clamp(2rem,5.5vw,3rem);font-weight:730;letter-spacing:-.035em;line-height:1.06;
      max-width:19ch;text-wrap:balance}
   .standfirst{margin:0;color:var(--muted);max-width:60ch;font-size:1.08rem}
@@ -54,7 +63,7 @@
 
   button.act{font:inherit;font-weight:600;cursor:pointer;border-radius:9px;
              border:1px solid var(--accent);background:var(--accent);color:#fff;padding:13px 24px;font-size:1.02rem}
-  @media (prefers-color-scheme: dark){button.act{color:#06302b}}
+  button.act:hover:not(:disabled){filter:brightness(1.08)}
   button.act:disabled{opacity:.45;cursor:not-allowed}
   button.ghost{background:var(--panel);color:var(--ink);border-color:var(--line);font-weight:550;padding:9px 16px;font-size:.95rem}
   .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-top:6px}
@@ -84,14 +93,19 @@
   footer{margin-top:52px;padding-top:22px;border-top:1px solid var(--line);
          color:var(--muted);font-size:.9rem;display:flex;gap:10px 24px;flex-wrap:wrap}
   a{color:var(--accent)}
+  .credit b{color:var(--ink);font-weight:650}
 </style>
 </head>
 <body>
 <div class="wrap">
 
   <header>
+    <div class="brandbar">
+      <img src="robonamix-logo.png" alt="Robonamix" width="368" height="197">
+      <span class="rule" aria-hidden="true"></span>
+    </div>
     <p class="eyebrow">Open the box · plug it in · press one button</p>
-    <h1>Build these with your own Arduino</h1>
+    <h1>Build these with <span class="grad">your own Arduino</span></h1>
     <p class="standfirst">
       Five things worth making, each with its wiring and its code. Pick one, plug your board
       into this computer, and the code goes straight onto it from this page — no downloads,
@@ -114,8 +128,12 @@
   <div id="detail"></div>
 
   <footer>
-    <span>Built with Arduino, and flashed over WebSerial.</span>
-    <span>Nothing you do here is sent anywhere — the code goes from this page to your board.</span>
+    <span class="credit">
+      Projects, firmware and this browser flasher built by <b>Mousa</b> at Robonamix.
+    </span>
+    <span>Flashed over WebSerial — nothing you do here is sent anywhere; the code goes
+      from this page straight to your board.</span>
+    <span><a href="https://github.com/mousaqame/arduino">Source on GitHub</a></span>
   </footer>
 </div>
 
