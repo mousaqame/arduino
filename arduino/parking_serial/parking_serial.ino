@@ -63,6 +63,10 @@ Zone          lastZone    = Z_FAR;
 bool          manualMode  = false;
 bool          manualLed   = false;
 
+// False when the screen didn't answer on I2C. Everything else runs regardless;
+// only the drawing is skipped.
+bool          oledOk      = false;
+
 unsigned long lastMeasure = 0;
 unsigned long lastTelem   = 0;
 unsigned long lastDisplay = 0;
@@ -106,19 +110,27 @@ void setup() {
   EEPROM.get(EEPROM_ADDR, cfg);
   if (cfg.magic != EEPROM_MAGIC) loadDefaults();
 
-  if (!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) {
-    Serial.println(F("ERR oled init failed"));
-    while (1);
-  }
-  Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
+  // A loose screen wire used to stop here forever (while(1)). A stopped board
+  // sends nothing at all, which from the PC is indistinguishable from having no
+  // code on it - so the dashboard says "plugged in, no code yet", you reflash,
+  // it succeeds, and nothing changes. Meanwhile the sensor, LED and buzzer are
+  // all fine and only the screen is missing. Carry on and say so instead.
+  oledOk = display.begin(SSD1306_SWITCHCAPVCC, 0x3C);
 
-  display.clearDisplay();
-  display.setTextColor(SSD1306_WHITE);
-  display.setTextSize(2);
-  display.setCursor(15, 8);
-  display.println(F("READY"));
-  display.display();
-  delay(2000);
+  if (oledOk) {
+    Wire.setClock(400000);  // fast mode; the default 100kHz redraw starves the loop
+
+    display.clearDisplay();
+    display.setTextColor(SSD1306_WHITE);
+    display.setTextSize(2);
+    display.setCursor(15, 8);
+    display.println(F("READY"));
+    display.display();
+    delay(2000);
+  } else {
+    Serial.println(F("# no screen found at 0x3C - check its A4/A5 wires"));
+    Serial.println(F("# everything else still works, carrying on without it"));
+  }
 
   Serial.println(F("# parking_serial ready"));
   printConfig();
@@ -202,6 +214,7 @@ void serviceBuzzer(unsigned long now) {
 }
 
 void drawDisplay() {
+  if (!oledOk) return;
   display.clearDisplay();
 
   display.setTextSize(1);
