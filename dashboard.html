@@ -1,0 +1,425 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Parking Sensor</title>
+<style>
+  :root {
+    --bg:      #0b0f14;
+    --panel:   #131a22;
+    --panel-2: #0f151c;
+    --line:    #22303d;
+    --text:    #e6edf3;
+    --muted:   #8b9bab;
+
+    --far:    #64748b;
+    --close:  #38bdf8;
+    --good:   #22c55e;
+    --vclose: #f59e0b;
+    --stop:   #ef4444;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--text);
+    font: 15px/1.5 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  header {
+    display: flex; align-items: center; gap: 14px;
+    padding: 16px 22px;
+    border-bottom: 1px solid var(--line);
+    background: var(--panel-2);
+  }
+  header h1 {
+    margin: 0; font-size: 15px; font-weight: 650;
+    letter-spacing: .14em; text-transform: uppercase;
+  }
+  .spacer { flex: 1; }
+
+  .status { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 13px; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; background: var(--stop); }
+  .dot.on { background: var(--good); box-shadow: 0 0 0 3px rgba(34,197,94,.18); }
+
+  main {
+    display: grid;
+    grid-template-columns: minmax(0,2fr) minmax(280px,1fr);
+    gap: 18px; padding: 18px; max-width: 1400px; margin: 0 auto;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+    padding: 18px;
+  }
+  .panel h2 {
+    margin: 0 0 14px; font-size: 11px; font-weight: 650;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--muted);
+  }
+
+  /* readout */
+  .readout { display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap; }
+  .dist {
+    font-size: 76px; font-weight: 700; line-height: 1;
+    font-variant-numeric: tabular-nums; letter-spacing: -.02em;
+  }
+  .unit { font-size: 22px; color: var(--muted); }
+  .badge {
+    margin-left: auto; padding: 8px 18px; border-radius: 999px;
+    font-size: 20px; font-weight: 700; letter-spacing: .04em;
+    background: #1e2936; color: var(--muted);
+    transition: background .15s, color .15s;
+  }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 10px; }
+
+  /* proximity bar */
+  .bar { margin-top: 22px; }
+  .track {
+    position: relative; height: 26px; border-radius: 7px;
+    overflow: hidden; display: flex; border: 1px solid var(--line);
+  }
+  .track span { display: block; height: 100%; }
+  .marker {
+    position: absolute; top: -5px; width: 3px; height: 36px;
+    background: var(--text); border-radius: 2px;
+    box-shadow: 0 0 0 2px var(--panel);
+    transition: left .12s linear;
+  }
+  .ticks {
+    display: flex; justify-content: space-between;
+    color: var(--muted); font-size: 11px; margin-top: 7px;
+    font-variant-numeric: tabular-nums;
+  }
+
+  canvas { width: 100%; height: 190px; display: block; }
+
+  /* controls */
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  label.field { display: block; font-size: 11px; color: var(--muted); letter-spacing: .08em; text-transform: uppercase; }
+  label.field input {
+    width: 100%; margin-top: 5px; padding: 8px 10px;
+    background: var(--panel-2); border: 1px solid var(--line);
+    color: var(--text); border-radius: 7px; font: inherit;
+    font-variant-numeric: tabular-nums;
+  }
+  label.field input:focus { outline: none; border-color: var(--close); }
+
+  .btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+  button {
+    padding: 8px 14px; border-radius: 7px; font: inherit; font-weight: 550;
+    background: var(--panel-2); color: var(--text);
+    border: 1px solid var(--line); cursor: pointer;
+    transition: border-color .12s, background .12s;
+  }
+  button:hover { border-color: var(--muted); }
+  button:disabled { opacity: .4; cursor: not-allowed; }
+  button.active { border-color: var(--good); color: var(--good); }
+  button.warn.active { border-color: var(--vclose); color: var(--vclose); }
+
+  #log {
+    margin: 0; padding: 12px; height: 190px; overflow-y: auto;
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 8px;
+    font: 12px/1.65 ui-monospace, "Cascadia Mono", Consolas, monospace;
+    color: var(--muted); white-space: pre-wrap; word-break: break-word;
+  }
+  #log b { color: var(--text); font-weight: 500; }
+  #log i { color: var(--stop); font-style: normal; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Parking Sensor</h1>
+  <div class="spacer"></div>
+  <div class="status"><span class="dot" id="dot"></span><span id="conn">connecting…</span></div>
+</header>
+
+<main>
+  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <section class="panel">
+      <h2>Distance</h2>
+      <div class="readout">
+        <span class="dist" id="dist">—</span><span class="unit">cm</span>
+        <span class="badge" id="zone">—</span>
+      </div>
+      <div class="sub" id="sub">waiting for telemetry…</div>
+
+      <div class="bar">
+        <div class="track" id="track">
+          <span id="b-stop"></span><span id="b-vclose"></span><span id="b-good"></span>
+          <span id="b-close"></span><span id="b-far"></span>
+          <div class="marker" id="marker" style="left:0"></div>
+        </div>
+        <div class="ticks"><span>0</span><span id="tick-mid">—</span><span id="tick-max">—</span></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>History</h2>
+      <canvas id="chart"></canvas>
+    </section>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:18px;min-width:0">
+    <section class="panel">
+      <h2>Thresholds (cm)</h2>
+      <div class="grid2">
+        <label class="field">Far    <input type="number" id="t-far"    min="1" max="400"></label>
+        <label class="field">Close  <input type="number" id="t-close"  min="1" max="400"></label>
+        <label class="field">Good   <input type="number" id="t-good"   min="1" max="400"></label>
+        <label class="field">V.Close<input type="number" id="t-vclose" min="1" max="400"></label>
+      </div>
+      <div class="btns">
+        <button id="save">Save to EEPROM</button>
+        <button id="reset">Defaults</button>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>Control</h2>
+      <div class="btns">
+        <button id="mode"   class="warn">Mode: Auto</button>
+        <button id="mute"   class="warn">Mute: Off</button>
+        <button id="led"    disabled>LED Off</button>
+        <button id="buzz">Test beep</button>
+      </div>
+      <div class="sub">LED override needs Manual mode.</div>
+    </section>
+
+    <section class="panel">
+      <h2>Serial log</h2>
+      <pre id="log"></pre>
+    </section>
+  </div>
+</main>
+
+<script>
+const ZONES = ['STOP!', 'V.CLOSE', 'GOOD', 'CLOSE', 'FAR'];
+const COLOR = {
+  'FAR': 'var(--far)', 'CLOSE': 'var(--close)', 'GOOD': 'var(--good)',
+  'V.CLOSE': 'var(--vclose)', 'STOP!': 'var(--stop)'
+};
+const RAW = { 'FAR': '#64748b', 'CLOSE': '#38bdf8', 'GOOD': '#22c55e',
+              'V.CLOSE': '#f59e0b', 'STOP!': '#ef4444' };
+
+const $ = id => document.getElementById(id);
+let cfg = { far: 100, close: 50, good: 20, vclose: 10, muted: '0', mode: 'AUTO' };
+let history = [];
+let recent = [];      // last few valid readings, for the median
+let editing = null;   // don't clobber a threshold box while it's focused
+
+// --- command plumbing -----------------------------------------------------
+
+async function send(cmd) {
+  try {
+    const r = await fetch('/cmd', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd })
+    });
+    if (!r.ok) addLog('# dashboard: board not connected', true);
+  } catch { addLog('# dashboard: request failed', true); }
+}
+
+function addLog(line, err) {
+  const el = $('log');
+  const near = el.scrollTop + el.clientHeight >= el.scrollHeight - 30;
+  const span = document.createElement(err || line.startsWith('ERR') ? 'i'
+                                    : line.startsWith('OK') ? 'b' : 'span');
+  span.textContent = line + '\n';
+  el.appendChild(span);
+  while (el.childNodes.length > 200) el.removeChild(el.firstChild);
+  if (near) el.scrollTop = el.scrollHeight;
+}
+
+// --- rendering ------------------------------------------------------------
+
+function maxRange() { return Math.max(120, Math.round(cfg.far * 1.4)); }
+
+function renderBands() {
+  const max = maxRange();
+  const pct = v => (Math.min(v, max) / max * 100) + '%';
+  const stops = [
+    ['b-stop',   cfg.vclose,            RAW['STOP!']],
+    ['b-vclose', cfg.good - cfg.vclose, RAW['V.CLOSE']],
+    ['b-good',   cfg.close - cfg.good,  RAW['GOOD']],
+    ['b-close',  cfg.far - cfg.close,   RAW['CLOSE']],
+    ['b-far',    max - cfg.far,         RAW['FAR']],
+  ];
+  for (const [id, width, color] of stops) {
+    const el = $(id);
+    el.style.width = pct(Math.max(0, width));
+    el.style.background = color;
+    el.style.opacity = .8;
+  }
+  $('tick-mid').textContent = Math.round(max / 2);
+  $('tick-max').textContent = max;
+}
+
+function median(xs) {
+  const s = [...xs].sort((a, b) => a - b);
+  return s[Math.floor(s.length / 2)];
+}
+
+function renderReading(d, zone) {
+  if (d === null) {
+    $('dist').textContent = '—';
+    $('sub').textContent = 'no echo — nothing within range';
+    $('marker').style.opacity = '0';   // not 0 cm; hide rather than point at STOP
+    recent = [];
+  } else {
+    recent.push(d);
+    if (recent.length > 3) recent.shift();
+    const m = median(recent);
+    $('dist').textContent = m.toFixed(0);
+    $('sub').textContent = `raw ${d.toFixed(1)} cm · median of last ${recent.length}`;
+    $('marker').style.opacity = '1';
+    $('marker').style.left = (Math.min(d, maxRange()) / maxRange() * 100) + '%';
+  }
+  $('zone').textContent = zone;
+  $('zone').style.background = COLOR[zone] || '#1e2936';
+  $('zone').style.color = zone === 'FAR' ? '#e6edf3' : '#08111a';
+  $('dist').style.color = d === null ? 'var(--muted)' : COLOR[zone] || 'var(--text)';
+}
+
+function renderConfig() {
+  for (const k of ['far', 'close', 'good', 'vclose']) {
+    if (editing !== k) $('t-' + k).value = cfg[k];
+  }
+  const manual = cfg.mode === 'MANUAL';
+  $('mode').textContent = 'Mode: ' + (manual ? 'Manual' : 'Auto');
+  $('mode').classList.toggle('active', manual);
+  $('led').disabled = !manual;
+  const muted = cfg.muted === '1';
+  $('mute').textContent = 'Mute: ' + (muted ? 'On' : 'Off');
+  $('mute').classList.toggle('active', muted);
+  renderBands();
+}
+
+function drawChart() {
+  const cv = $('chart'), ctx = cv.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  const w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== w * dpr || cv.height !== h * dpr) {
+    cv.width = w * dpr; cv.height = h * dpr;
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, w, h);
+
+  const max = maxRange();
+  const y = v => h - (Math.min(v, max) / max) * h;
+
+  // threshold guides
+  ctx.setLineDash([3, 4]);
+  ctx.lineWidth = 1;
+  for (const [k, c] of [['far', RAW['CLOSE']], ['close', RAW['GOOD']],
+                        ['good', RAW['V.CLOSE']], ['vclose', RAW['STOP!']]]) {
+    ctx.strokeStyle = c; ctx.globalAlpha = .35;
+    ctx.beginPath(); ctx.moveTo(0, y(cfg[k])); ctx.lineTo(w, y(cfg[k])); ctx.stroke();
+  }
+  ctx.setLineDash([]); ctx.globalAlpha = 1;
+
+  if (history.length < 2) return;
+  const n = Math.min(history.length, 240);
+  const pts = history.slice(-n);
+  const x = i => (i / (n - 1)) * w;
+
+  ctx.lineWidth = 2;
+  ctx.lineJoin = 'round';
+  ctx.strokeStyle = RAW[pts[pts.length - 1].z] || '#e6edf3';
+  ctx.beginPath();
+  let pen = false;
+  pts.forEach((p, i) => {
+    if (p.d === null) { pen = false; return; }
+    if (!pen) { ctx.moveTo(x(i), y(p.d)); pen = true; }
+    else ctx.lineTo(x(i), y(p.d));
+  });
+  ctx.stroke();
+}
+
+// --- events ---------------------------------------------------------------
+
+const es = new EventSource('/stream');
+let dirty = false;
+
+es.onmessage = e => {
+  const m = JSON.parse(e.data);
+  if (m.type === 'snapshot') {
+    setConn(m.connected);
+    if (m.config && Object.keys(m.config).length) applyCfg(m.config);
+    history = m.history || [];
+    $('log').textContent = '';
+    (m.log || []).forEach(l => addLog(l));
+    const last = history[history.length - 1];
+    if (last) renderReading(last.d, last.z);
+    dirty = true;
+  } else if (m.type === 'telemetry') {
+    history.push({ t: m.t, d: m.d, z: m.z });
+    if (history.length > 240) history.shift();
+    renderReading(m.d, m.z);
+    dirty = true;
+  } else if (m.type === 'config') {
+    applyCfg(m.config);
+  } else if (m.type === 'status') {
+    setConn(m.connected);
+  } else if (m.type === 'log') {
+    addLog(m.line);
+  }
+};
+es.onerror = () => setConn(false);
+
+function applyCfg(c) {
+  for (const k of ['far', 'close', 'good', 'vclose']) {
+    if (c[k] !== undefined) cfg[k] = parseInt(c[k], 10);
+  }
+  if (c.muted !== undefined) cfg.muted = c.muted;
+  if (c.mode !== undefined) cfg.mode = c.mode;
+  renderConfig();
+  dirty = true;
+}
+
+function setConn(ok) {
+  $('dot').classList.toggle('on', !!ok);
+  $('conn').textContent = ok ? 'COM3 connected' : 'disconnected';
+}
+
+for (const k of ['far', 'close', 'good', 'vclose']) {
+  const el = $('t-' + k);
+  el.addEventListener('focus', () => editing = k);
+  el.addEventListener('blur', () => editing = null);
+  el.addEventListener('change', () => {
+    const v = parseInt(el.value, 10);
+    if (v >= 1 && v <= 400) send(`SET ${k.toUpperCase()} ${v}`);
+  });
+}
+
+$('mode').onclick = () => send('MODE ' + (cfg.mode === 'MANUAL' ? 'AUTO' : 'MANUAL'));
+$('mute').onclick = () => send('MUTE ' + (cfg.muted === '1' ? 'OFF' : 'ON'));
+$('buzz').onclick = () => send('BUZZ 1200 150');
+$('save').onclick = () => send('SAVE');
+$('reset').onclick = () => send('RESET');
+
+let ledOn = false;
+$('led').onclick = () => { ledOn = !ledOn; send('LED ' + (ledOn ? 'ON' : 'OFF'));
+                           $('led').textContent = 'LED ' + (ledOn ? 'On' : 'Off');
+                           $('led').classList.toggle('active', ledOn); };
+
+// Repaint on a frame timer rather than per-message, so a fast board can't
+// out-run the renderer.
+function tick() {
+  if (dirty) { drawChart(); dirty = false; }
+  requestAnimationFrame(tick);
+}
+requestAnimationFrame(tick);
+window.addEventListener('resize', () => dirty = true);
+renderConfig();
+</script>
+</body>
+</html>
