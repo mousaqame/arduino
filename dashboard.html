@@ -137,6 +137,15 @@
   td.pin { font-family:var(--mono); font-weight:600; white-space:nowrap; }
   .swatch { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:8px; }
 
+  /* Wiring table: one row per wire, grouped by part. */
+  table.wiring td { border-bottom:none; padding:6px 14px; }
+  table.wiring tr.grp td { border-top:1px solid var(--line); padding-top:11px; }
+  table.wiring tr.grp:first-child td { border-top:none; }
+  table.wiring td.part { font-weight:620; white-space:nowrap; }
+  table.wiring td.part, table.wiring td:last-child { border-right:1px solid var(--line); }
+  table.wiring td:last-child { border-right:none; color:var(--muted); }
+  .tiny { font-size:11px; color:var(--muted); font-weight:400; font-family:ui-sans-serif, system-ui; }
+
   /* sketch picker */
   .picks { display:flex; flex-direction:column; gap:8px; }
   .pick {
@@ -261,93 +270,138 @@
         <div class="stepbody">
           <h3>Connect the parts</h3>
           <p>
-            Four things plug into the Arduino. Each coloured line below is one connection —
-            match the pin number on the board to the part.
+            Four parts plug into the Arduino. Every leg on every part has one place it
+            goes — the labels below name the leg (the tiny writing on the part) and the
+            Arduino pin it connects to.
           </p>
 
           <figure>
             <div class="diagram">
-              <svg viewBox="0 0 660 380" role="img" aria-label="Wiring diagram: OLED screen to pins A4 and A5, distance sensor to pins 9 and 10, LED to pin 6, buzzer to pin 7.">
+              <svg viewBox="0 0 700 490" role="img" aria-label="Wiring diagram. OLED screen: VCC to 5V, GND to GND, SDA to A4, SCL to A5. Distance sensor: VCC to 5V, GND to GND, TRIG to pin 9, ECHO to pin 10. LED: long leg through a resistor to pin 6, short leg to GND. Buzzer: plus to pin 7, minus to GND.">
                 <!-- board -->
-                <rect x="34" y="70" width="150" height="250" rx="12"
+                <rect x="30" y="100" width="145" height="362" rx="12"
                       fill="var(--panel)" stroke="var(--muted)" stroke-width="1.5"/>
-                <rect x="34" y="70" width="150" height="30" rx="12" fill="var(--accent)" opacity=".14"/>
-                <text x="109" y="90" text-anchor="middle" font-size="14" font-weight="650"
+                <rect x="30" y="100" width="145" height="32" rx="12" fill="var(--accent)" opacity=".14"/>
+                <text x="102" y="121" text-anchor="middle" font-size="14" font-weight="650"
                       fill="var(--ink)" font-family="ui-sans-serif, system-ui">Arduino Uno</text>
 
                 <!-- usb stub -->
-                <rect x="14" y="120" width="22" height="34" rx="4" fill="var(--muted)" opacity=".5"/>
-                <text x="25" y="172" text-anchor="middle" font-size="10" fill="var(--muted)"
+                <rect x="10" y="150" width="21" height="34" rx="4" fill="var(--muted)" opacity=".5"/>
+                <text x="20" y="200" text-anchor="middle" font-size="10" fill="var(--muted)"
                       font-family="ui-sans-serif, system-ui">USB</text>
 
-                <!-- pin labels on the board -->
+                <!-- pins the signal wires land on -->
                 <g font-family="ui-monospace, Consolas, monospace" font-size="13" font-weight="650" fill="var(--ink)">
-                  <text x="170" y="130" text-anchor="end">A4 A5</text>
-                  <text x="170" y="185" text-anchor="end">9 · 10</text>
-                  <text x="170" y="240" text-anchor="end">6</text>
-                  <text x="170" y="292" text-anchor="end">7</text>
+                  <text x="163" y="148" text-anchor="end">A4 · A5</text>
+                  <text x="163" y="252" text-anchor="end">9 · 10</text>
+                  <text x="163" y="356" text-anchor="end">6</text>
+                  <text x="163" y="447" text-anchor="end">7</text>
                 </g>
+                <text x="102" y="420" text-anchor="middle" font-size="10.5" fill="var(--muted)"
+                      font-family="ui-sans-serif, system-ui">plus 5V and GND</text>
+                <text x="102" y="434" text-anchor="middle" font-size="10.5" fill="var(--muted)"
+                      font-family="ui-sans-serif, system-ui">for every part</text>
 
                 <!-- wires -->
                 <g fill="none" stroke-width="3" stroke-linecap="round">
-                  <path d="M184 125 C 270 125, 300 105, 386 105" stroke="var(--wire-oled)"/>
-                  <path d="M184 180 C 270 180, 300 190, 386 190" stroke="var(--wire-sonic)"/>
-                  <path d="M184 235 C 270 235, 300 265, 386 265" stroke="var(--wire-led)"/>
-                  <path d="M184 288 C 270 288, 300 325, 386 325" stroke="var(--wire-buzz)"/>
+                  <path d="M175 144 C 270 144, 320 144, 400 144" stroke="var(--wire-oled)"/>
+                  <path d="M175 248 C 270 248, 320 248, 400 248" stroke="var(--wire-sonic)"/>
+                  <path d="M175 352 C 270 352, 320 352, 400 352" stroke="var(--wire-led)"/>
+                  <path d="M175 443 C 270 443, 320 443, 400 443" stroke="var(--wire-buzz)"/>
                 </g>
 
-                <!-- components -->
-                <g>
-                  <rect x="386" y="78" width="240" height="56" rx="10"
+                <!-- components, each listing its own legs -->
+                <g font-family="ui-sans-serif, system-ui">
+                  <rect x="400" y="100" width="285" height="88" rx="10"
                         fill="var(--panel)" stroke="var(--wire-oled)" stroke-width="1.5"/>
-                  <text x="404" y="102" font-size="14" font-weight="640" fill="var(--ink)"
-                        font-family="ui-sans-serif, system-ui">Little screen</text>
-                  <text x="404" y="121" font-size="11.5" fill="var(--muted)"
-                        font-family="ui-sans-serif, system-ui">shows the distance · pins A4 and A5</text>
+                  <text x="418" y="126" font-size="13.5" font-weight="640" fill="var(--ink)">Little screen (OLED)</text>
+                  <text x="418" y="150" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">VCC → 5V      GND → GND</text>
+                  <text x="418" y="172" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">SDA → A4      SCL → A5</text>
 
-                  <rect x="386" y="163" width="240" height="56" rx="10"
+                  <rect x="400" y="204" width="285" height="88" rx="10"
                         fill="var(--panel)" stroke="var(--wire-sonic)" stroke-width="1.5"/>
-                  <text x="404" y="187" font-size="14" font-weight="640" fill="var(--ink)"
-                        font-family="ui-sans-serif, system-ui">Distance sensor</text>
-                  <text x="404" y="206" font-size="11.5" fill="var(--muted)"
-                        font-family="ui-sans-serif, system-ui">the two silver eyes · pins 9 and 10</text>
+                  <text x="418" y="230" font-size="13.5" font-weight="640" fill="var(--ink)">Distance sensor (HC-SR04)</text>
+                  <text x="418" y="254" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">VCC  → 5V     GND  → GND</text>
+                  <text x="418" y="276" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">TRIG → 9      ECHO → 10</text>
 
-                  <rect x="386" y="240" width="240" height="50" rx="10"
+                  <rect x="400" y="308" width="285" height="88" rx="10"
                         fill="var(--panel)" stroke="var(--wire-led)" stroke-width="1.5"/>
-                  <text x="404" y="262" font-size="14" font-weight="640" fill="var(--ink)"
-                        font-family="ui-sans-serif, system-ui">LED light</text>
-                  <text x="404" y="279" font-size="11.5" fill="var(--muted)"
-                        font-family="ui-sans-serif, system-ui">pin 6 · needs a resistor</text>
+                  <text x="418" y="334" font-size="13.5" font-weight="640" fill="var(--ink)">LED light</text>
+                  <text x="418" y="358" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">long leg  → resistor → 6</text>
+                  <text x="418" y="380" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">short leg → GND</text>
 
-                  <rect x="386" y="300" width="240" height="50" rx="10"
+                  <rect x="400" y="412" width="285" height="62" rx="10"
                         fill="var(--panel)" stroke="var(--wire-buzz)" stroke-width="1.5"/>
-                  <text x="404" y="322" font-size="14" font-weight="640" fill="var(--ink)"
-                        font-family="ui-sans-serif, system-ui">Buzzer</text>
-                  <text x="404" y="339" font-size="11.5" fill="var(--muted)"
-                        font-family="ui-sans-serif, system-ui">makes the beeps · pin 7</text>
+                  <text x="418" y="438" font-size="13.5" font-weight="640" fill="var(--ink)">Buzzer</text>
+                  <text x="418" y="462" font-size="12" fill="var(--muted)"
+                        font-family="ui-monospace, Consolas, monospace">+ → 7         − → GND</text>
                 </g>
               </svg>
             </div>
             <figcaption>
-              Every part also needs power: a red wire to <b>5V</b> and a black wire to <b>GND</b>
-              on the Arduino. Those are the same for all four parts, so they aren't drawn here.
+              The coloured lines are the signal wires. <b>5V</b> and <b>GND</b> are not drawn
+              because all four parts share them — use the breadboard's red and blue rails.
             </figcaption>
           </figure>
 
           <div class="tablewrap">
-            <table>
-              <thead><tr><th>Part</th><th>Arduino pin</th><th>What it does</th></tr></thead>
+            <table class="wiring">
+              <thead>
+                <tr><th>Part</th><th>Leg on the part</th><th>Goes to</th><th>Why</th></tr>
+              </thead>
               <tbody>
-                <tr><td><span class="swatch" style="background:var(--wire-oled)"></span>Little screen</td><td class="pin">A4, A5</td><td>Shows the distance in numbers</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-sonic)"></span>Distance sensor</td><td class="pin">9, 10</td><td>Sends out a click and times the echo</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-led)"></span>LED light</td><td class="pin">6</td><td>Lights up when something is close</td></tr>
-                <tr><td><span class="swatch" style="background:var(--wire-buzz)"></span>Buzzer</td><td class="pin">7</td><td>Beeps faster the closer you get</td></tr>
+                <tr class="grp">
+                  <td class="part" rowspan="4"><span class="swatch" style="background:var(--wire-oled)"></span>Little screen<br><span class="tiny">OLED</span></td>
+                  <td class="pin">VCC</td><td class="pin">5V</td><td rowspan="4">Shows the distance as a number</td>
+                </tr>
+                <tr><td class="pin">GND</td><td class="pin">GND</td></tr>
+                <tr><td class="pin">SDA</td><td class="pin">A4</td></tr>
+                <tr><td class="pin">SCL</td><td class="pin">A5</td></tr>
+
+                <tr class="grp">
+                  <td class="part" rowspan="4"><span class="swatch" style="background:var(--wire-sonic)"></span>Distance sensor<br><span class="tiny">HC-SR04</span></td>
+                  <td class="pin">VCC</td><td class="pin">5V</td><td rowspan="4">Sends a click and times the echo</td>
+                </tr>
+                <tr><td class="pin">GND</td><td class="pin">GND</td></tr>
+                <tr><td class="pin">TRIG</td><td class="pin">9</td></tr>
+                <tr><td class="pin">ECHO</td><td class="pin">10</td></tr>
+
+                <tr class="grp">
+                  <td class="part" rowspan="2"><span class="swatch" style="background:var(--wire-led)"></span>LED light</td>
+                  <td class="pin">long leg (+)</td><td class="pin">6 <span class="tiny">via resistor</span></td>
+                  <td rowspan="2">Lights up when something is close</td>
+                </tr>
+                <tr><td class="pin">short leg (−)</td><td class="pin">GND</td></tr>
+
+                <tr class="grp">
+                  <td class="part" rowspan="2"><span class="swatch" style="background:var(--wire-buzz)"></span>Buzzer</td>
+                  <td class="pin">+</td><td class="pin">7</td>
+                  <td rowspan="2">Beeps faster the closer you get</td>
+                </tr>
+                <tr><td class="pin">−</td><td class="pin">GND</td></tr>
               </tbody>
             </table>
           </div>
+
+          <p class="hint">
+            <b>The LED only works one way round.</b> The longer leg is the plus side and goes
+            towards pin 6, with a resistor (220–330 Ω) in between so it doesn't burn out. The
+            shorter leg, next to the flat edge of the plastic, goes to GND.
+          </p>
+          <p class="hint">
+            <b>Check the writing on your screen.</b> Most of these little screens run on 5V,
+            but a few are 3.3V only — if yours says 3.3V, use the 3V3 pin instead of 5V.
+            Some buzzers have no + marking at all; those work either way round.
+          </p>
           <p class="hint">
             Not sure the LED is in the right way round? Pick the <b>Blink test</b> in step 3 —
-            if the light flashes, it's wired correctly.
+            if the light flashes, it's correct. If not, turn it around.
           </p>
         </div>
       </div>

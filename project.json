@@ -8,10 +8,10 @@
   "tags": ["uno", "hc-sr04", "ssd1306", "serial", "dashboard"],
   "hardware": [
     "Arduino Uno (COM3)",
-    "HC-SR04 ultrasonic — trig 9, echo 10",
-    "LED — pin 6",
-    "Piezo buzzer — pin 7",
-    "SSD1306 128x32 OLED — I2C 0x3C"
+    "HC-SR04 — VCC:5V, GND:GND, TRIG:9, ECHO:10",
+    "SSD1306 128x32 OLED — VCC:5V, GND:GND, SDA:A4, SCL:A5, addr 0x3C",
+    "LED — long leg via 220-330R resistor to pin 6, short leg to GND",
+    "Piezo buzzer — + to pin 7, - to GND"
   ],
   "docs": [
     { "label": "Build guide", "path": "docs/guide.html" },

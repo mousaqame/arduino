@@ -22,16 +22,26 @@ Three things working together:
 
 ## Part 0 — Hardware
 
-| Component        | Pin(s) |
-| ---------------- | ------ |
-| HC-SR04 trigger  | 9      |
-| HC-SR04 echo     | 10     |
-| LED (+ resistor) | 6      |
-| Piezo buzzer     | 7      |
-| SSD1306 OLED     | I2C — SDA `A4`, SCL `A5`, address `0x3C`, 128x32 |
+One row per wire. The middle column is the marking printed on the part itself.
 
-Power the OLED and sensor from `5V`/`GND`. The LED needs a series resistor
-(220–330 Ω) between pin 6 and the LED anode.
+| Part | Leg | Arduino pin |
+| --- | --- | --- |
+| SSD1306 OLED · 128x32 · addr `0x3C` | `VCC` | `5V` |
+| | `GND` | `GND` |
+| | `SDA` | `A4` |
+| | `SCL` | `A5` |
+| HC-SR04 ultrasonic | `VCC` | `5V` |
+| | `GND` | `GND` |
+| | `TRIG` | `9` |
+| | `ECHO` | `10` |
+| LED | long leg, anode (+) | `6`, via a 220–330 Ω resistor |
+| | short leg, cathode (−) | `GND` |
+| Piezo buzzer | `+` | `7` |
+| | `−` | `GND` |
+
+`A4`/`A5` are the Uno's hardware I²C pins — the OLED will not work on any other
+pair. A few OLED modules are 3.3V only; check the silkscreen and use `3V3` if
+yours says so. Unmarked piezo buzzers are not polarised and work either way.
 
 ### Confirm the board is seen
 

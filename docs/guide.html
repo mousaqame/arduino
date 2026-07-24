@@ -275,15 +275,30 @@
 
       <section id="p0">
         <div class="head"><span class="num">00</span><h2>Hardware</h2></div>
+        <p>One row per wire. The middle column is the marking on the part itself.</p>
         <div class="tablewrap">
           <table>
-            <thead><tr><th>Component</th><th>Pin</th><th>Notes</th></tr></thead>
+            <thead><tr><th>Part</th><th>Leg</th><th>Arduino pin</th><th>Notes</th></tr></thead>
             <tbody>
-              <tr><td>HC-SR04 trigger</td><td><code>9</code></td><td>10 µs pulse starts a reading</td></tr>
-              <tr><td>HC-SR04 echo</td><td><code>10</code></td><td>pulse width encodes distance</td></tr>
-              <tr><td>LED</td><td><code>6</code></td><td>needs a 220–330 Ω series resistor</td></tr>
-              <tr><td>Piezo buzzer</td><td><code>7</code></td><td>driven by <code>tone()</code>, which uses Timer2</td></tr>
-              <tr><td>SSD1306 OLED</td><td><code>A4</code> / <code>A5</code></td><td>I²C, address <code>0x3C</code>, 128×32</td></tr>
+              <tr><td rowspan="4">SSD1306 OLED<br>128×32, <code>0x3C</code></td>
+                  <td><code>VCC</code></td><td><code>5V</code></td><td>a few modules are 3.3V only — check the silkscreen</td></tr>
+              <tr><td><code>GND</code></td><td><code>GND</code></td><td></td></tr>
+              <tr><td><code>SDA</code></td><td><code>A4</code></td><td rowspan="2">hardware I²C pins; no other pair works</td></tr>
+              <tr><td><code>SCL</code></td><td><code>A5</code></td></tr>
+
+              <tr><td rowspan="4">HC-SR04</td>
+                  <td><code>VCC</code></td><td><code>5V</code></td><td></td></tr>
+              <tr><td><code>GND</code></td><td><code>GND</code></td><td></td></tr>
+              <tr><td><code>TRIG</code></td><td><code>9</code></td><td>10 µs pulse starts a reading</td></tr>
+              <tr><td><code>ECHO</code></td><td><code>10</code></td><td>pulse width encodes distance</td></tr>
+
+              <tr><td rowspan="2">LED</td>
+                  <td>long leg (+)</td><td><code>6</code></td><td>via a 220–330 Ω series resistor</td></tr>
+              <tr><td>short leg (−)</td><td><code>GND</code></td><td>flat edge of the plastic</td></tr>
+
+              <tr><td rowspan="2">Piezo buzzer</td>
+                  <td><code>+</code></td><td><code>7</code></td><td>driven by <code>tone()</code>, which uses Timer2</td></tr>
+              <tr><td><code>−</code></td><td><code>GND</code></td><td>unmarked buzzers are not polarised</td></tr>
             </tbody>
           </table>
         </div>

@@ -6,13 +6,25 @@ dashboard. Uses the toolchain that ships with Arduino IDE 1.8.16
 
 ## Hardware (car parking sensor)
 
-| Component        | Pin(s)            |
-| ---------------- | ----------------- |
-| HC-SR04 trigger  | 9                 |
-| HC-SR04 echo     | 10                |
-| LED              | 6                 |
-| Buzzer           | 7                 |
-| SSD1306 OLED     | I2C — A4/A5, addr `0x3C`, 128x32 |
+One row per wire — the middle column is the marking on the part itself.
+
+| Part | Leg | Arduino pin |
+| --- | --- | --- |
+| SSD1306 OLED · 128x32 · addr `0x3C` | `VCC` | `5V` |
+| | `GND` | `GND` |
+| | `SDA` | `A4` |
+| | `SCL` | `A5` |
+| HC-SR04 ultrasonic | `VCC` | `5V` |
+| | `GND` | `GND` |
+| | `TRIG` | `9` |
+| | `ECHO` | `10` |
+| LED | long leg (+) | `6`, via a 220–330 Ω resistor |
+| | short leg (−) | `GND` |
+| Piezo buzzer | `+` | `7` |
+| | `−` | `GND` |
+
+A few OLED modules are 3.3V only — check the silkscreen and use `3V3` if so.
+Unmarked piezo buzzers are not polarised and work either way round.
 
 ## Sketches
 
