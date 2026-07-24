@@ -114,8 +114,8 @@
   </header>
 
   <div class="warnbox" id="nosupport" hidden>
-    <b>This browser can't reach your Arduino</b>
-    <p>
+    <b id="nosupport-title">This browser can't reach your Arduino</b>
+    <p id="nosupport-body">
       Talking to a USB device needs <b>Chrome</b>, <b>Edge</b> or <b>Opera</b> on a computer.
       Firefox, Safari and phones don't allow it. You can still read the wiring and grab the
       code below.
@@ -212,8 +212,26 @@ const BOARDS = {
 };
 
 const $ = s => document.querySelector(s);
-const supported = 'serial' in navigator;
-if (!supported) $('#nosupport').hidden = false;
+// Two different reasons the flash button can't work, and they need different
+// answers. navigator.serial is only exposed in a SECURE CONTEXT - https:// or
+// localhost - so a page served over plain http:// on a LAN address fails the
+// 'serial' in navigator test even in Chrome. Reporting that as "your browser
+// doesn't support this" sends people to install a browser they already have.
+const hasSerial = 'serial' in navigator;
+const secure = window.isSecureContext;
+const supported = hasSerial && secure;
+
+if (!supported) {
+  if (!secure) {
+    $('#nosupport-title').textContent = 'This page needs a secure address';
+    $('#nosupport-body').innerHTML =
+      'Browsers only allow USB access over <b>https://</b>, or on <b>localhost</b>. ' +
+      'This page is on a plain <b>http://</b> address, so flashing is blocked here no ' +
+      'matter which browser you use. Open the https:// address instead. You can still ' +
+      'read the wiring and grab the code below.';
+  }
+  $('#nosupport').hidden = false;
+}
 
 let picked = null;
 
