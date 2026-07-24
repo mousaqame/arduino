@@ -137,6 +137,14 @@
   td.pin { font-family:var(--mono); font-weight:600; white-space:nowrap; }
   .swatch { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:8px; }
 
+  .seg{display:flex;gap:6px;background:var(--sunken);border:1px solid var(--line);
+       border-radius:10px;padding:4px;align-self:flex-start;flex-wrap:wrap}
+  .seg button{border:1px solid transparent;background:none;border-radius:7px;
+              padding:9px 16px;color:var(--muted);font:inherit;cursor:pointer;text-align:left}
+  .seg button[aria-pressed=true]{background:var(--panel);border-color:var(--line);
+                                 color:var(--accent);font-weight:640}
+  .seg button small{display:block;font-size:11.5px;font-weight:400;color:var(--muted)}
+
   /* Wiring table: one row per wire, grouped by part. */
   table.wiring td { border-bottom:none; padding:6px 14px; }
   table.wiring tr.grp td { border-top:1px solid var(--line); padding-top:11px; }
@@ -275,6 +283,13 @@
             Arduino pin it connects to.
           </p>
 
+          <h4>Which screen do you have?</h4>
+          <div class="seg" role="group" aria-label="Choose your screen">
+            <button id="scr-32" aria-pressed="true">Small wide one<small>128 x 32</small></button>
+            <button id="scr-64" aria-pressed="false">Marked HW-239<small>128 x 64, taller</small></button>
+          </div>
+          <p class="hint" id="scr-note"></p>
+
           <figure>
             <div class="diagram">
               <svg viewBox="0 0 700 490" role="img" aria-label="Wiring diagram. OLED screen: VCC to 5V, GND to GND, SDA to A4, SCL to A5. Distance sensor: VCC to 5V, GND to GND, TRIG to pin 9, ECHO to pin 10. LED: long leg through a resistor to pin 6, short leg to GND. Buzzer: plus to pin 7, minus to GND.">
@@ -357,7 +372,7 @@
               </thead>
               <tbody>
                 <tr class="grp">
-                  <td class="part" rowspan="4"><span class="swatch" style="background:var(--wire-oled)"></span>Little screen<br><span class="tiny">OLED</span></td>
+                  <td class="part" rowspan="4"><span class="swatch" style="background:var(--wire-oled)"></span>Little screen<br><span class="tiny" id="scr-label">OLED 128x32</span></td>
                   <td class="pin">VCC</td><td class="pin">5V</td><td rowspan="4">Shows the distance as a number</td>
                 </tr>
                 <tr><td class="pin">GND</td><td class="pin">GND</td></tr>
@@ -612,17 +627,62 @@ function renderSetup() {
 
 // ---- flashing -----------------------------------------------------------
 
+// ---- which screen ---------------------------------------------------------
+
+const SCREENS = {
+  'ssd1306-32': {
+    label: 'OLED 128x32',
+    note: 'The small wide one. Distance on the top line, the word underneath.'
+  },
+  'ssd1306-64': {
+    label: 'OLED 128x64 (HW-239)',
+    note: 'The taller one. Same four wires — only the code changes, and you get ' +
+          'a much bigger distance number. If yours says SH1106 rather than SSD1306 ' +
+          'the picture will be shifted or blank, and it needs a different library.'
+  },
+};
+
+let sketches = [];
+let screen = 'ssd1306-32';
+try { screen = localStorage.getItem('parking.screen') || 'ssd1306-32'; } catch {}
+
+function applyScreen(which, andPickSketch) {
+  screen = which;
+  try { localStorage.setItem('parking.screen', which); } catch {}
+  $('scr-32').setAttribute('aria-pressed', which === 'ssd1306-32');
+  $('scr-64').setAttribute('aria-pressed', which === 'ssd1306-64');
+  $('scr-label').textContent = SCREENS[which].label;
+  $('scr-note').textContent = SCREENS[which].note;
+
+  // Keep step 3 honest: the screen you picked decides which code to send.
+  if (andPickSketch) {
+    const match = sketches.find(s => s.display === which);
+    if (match) {
+      const radio = document.querySelector(`input[name=sketch][value="${match.name}"]`);
+      if (radio) radio.checked = true;
+    }
+  }
+}
+$('scr-32').onclick = () => applyScreen('ssd1306-32', true);
+$('scr-64').onclick = () => applyScreen('ssd1306-64', true);
+
 async function loadSketches() {
   const r = await fetch('/api/sketches');
   const d = await r.json();
-  $('picks').innerHTML = d.sketches.map((s, i) => `
+  sketches = d.sketches;
+  const wanted = sketches.find(s => s.display === screen);
+  $('picks').innerHTML = sketches.map(s => {
+    const isWanted = wanted ? s.name === wanted.name : s.needed;
+    return `
     <label class="pick">
-      <input type="radio" name="sketch" value="${s.name}" ${s.needed ? 'checked' : ''}>
+      <input type="radio" name="sketch" value="${s.name}" ${isWanted ? 'checked' : ''}>
       <span>
-        <b>${s.title}${s.needed ? '<span class="tag">use this one</span>' : ''}</b>
+        <b>${s.title}${isWanted ? '<span class="tag">use this one</span>' : ''}</b>
         <span>${s.blurb}</span>
       </span>
-    </label>`).join('');
+    </label>`;
+  }).join('');
+  applyScreen(screen, false);
 }
 
 function flashLine(kind, line) {

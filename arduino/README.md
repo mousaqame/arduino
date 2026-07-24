@@ -26,6 +26,26 @@ One row per wire — the middle column is the marking on the part itself.
 A few OLED modules are 3.3V only — check the silkscreen and use `3V3` if so.
 Unmarked piezo buzzers are not polarised and work either way round.
 
+### Two screens are supported
+
+| Screen | Sketch | Layout |
+| --- | --- | --- |
+| SSD1306 128x32, the small wide one | `parking_serial` | distance on top, zone below |
+| SSD1306 128x64, marked **HW-239** | `parking_hw239` | big distance, zone underneath |
+
+**The wiring is identical.** Both are SSD1306 over I²C at `0x3C`, so the same
+four wires work for either — only the code differs. Pick your screen in the
+**Set it up** tab and the right sketch is selected for you.
+
+If your taller module is an **SH1106** rather than an SSD1306 (common on 1.3"
+boards), the picture will be shifted sideways or blank. That needs a different
+library, not a different sketch — tell me and it's a small change.
+
+The 128x64 build carries one real cost: its screen buffer is 1024 bytes of RAM
+against 512 for the 128x32, and the compiler's "global variables" figure does
+not include it. That build therefore reports its own free memory in `GET`
+output as `free=`. Below roughly 200 bytes, expect random resets.
+
 ## Sketches
 
 - `parking_serial/` — **currently on the board.** The parking sensor plus a

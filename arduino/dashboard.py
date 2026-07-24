@@ -227,8 +227,15 @@ class Board:
 SKETCH_INFO = {
     "parking_serial": {
         "title": "Parking sensor + dashboard",
-        "blurb": "The full project. This is the one that talks to this website.",
+        "blurb": "For the small wide screen (128x32). This is the one that talks to this website.",
         "needed": True,
+        "display": "ssd1306-32",
+    },
+    "parking_hw239": {
+        "title": "Parking sensor + dashboard (HW-239 screen)",
+        "blurb": "Same thing, for the taller 0.96\" screen marked HW-239 (128x64). Bigger numbers.",
+        "needed": False,
+        "display": "ssd1306-64",
     },
     "parking_sensor": {
         "title": "Parking sensor on its own",
@@ -263,6 +270,7 @@ class Flasher:
                 "title": info.get("title", d.name.replace("_", " ").title()),
                 "blurb": info.get("blurb", ""),
                 "needed": info.get("needed", False),
+                "display": info.get("display"),
             })
         return out
 
