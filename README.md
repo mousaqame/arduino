@@ -12,7 +12,7 @@ click from there. Closing that window stops everything.
 | [robot](robot/) — Servo Robot | NodeMCU ESP8266 | COM6 | 8788 |
 | [gas-sensor](gas-sensor/) — Gas Leak Detector | Uno | COM8 | 8789 |
 | [temp-sensor](temp-sensor/) — Thermometer | Uno | COM7 | 8790 |
-| [knob-servo](knob-servo/) — Knob & Servo | Mega 2560 | — | 8792 |
+| [knob-servo](knob-servo/) — Knob & Servo | Mega 2560 | COM10 | 8792 |
 | [hub](hub/) — the catalog itself | — | — | 8080 |
 | [web](web/) — public site (paused) | — | — | static |
 
@@ -37,8 +37,12 @@ physically replugged.
 1. Arduino IDE 1.8.x — supplies the whole toolchain, no `arduino-cli` needed
 2. `pip install pyserial`
 3. Library Manager: `Adafruit SSD1306`, `DHT sensor library`
-4. Boards Manager: `esp8266` (for the robot only)
-5. Check your COM ports and adjust each `flash.ps1` default if they differ
+4. Boards Manager: `esp8266` **3.1.2** (for the robot only)
+5. Check your COM ports and adjust each `flash.ps1` *and* `dashboard.py`
+   default if they differ
+
+[HANDOFF.md](HANDOFF.md) walks through all of that step by step, including
+`setup-workshop.ps1`, which does most of it for you.
 
 ## Notes for later
 

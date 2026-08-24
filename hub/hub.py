@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
-"""Workshop hub — catalog and launcher for everything under D:\\Dev\\Workshop.
+"""Workshop hub — catalog and launcher for the folder this one sits in.
 
 Scans sibling folders for a `project.json` manifest, shows them as cards, opens
 their docs, and starts/stops their dev servers and dashboards.
 
     python hub.py                       # scan the parent folder, serve on 8080
-    python hub.py --root D:\\Dev --http-port 9000 --no-open
+    python hub.py --root <folder> --http-port 9000 --no-open
 
 Folders without a manifest still show up as "unregistered" so old projects can
 be adopted with one click.

@@ -1,6 +1,6 @@
 # Workshop hub
 
-A catalog and launcher for everything under `D:\Dev\Workshop`. Shows every
+A catalog and launcher for everything in the folder it sits in. Shows every
 project as a card, opens its docs, and starts or stops its dashboards and dev
 servers.
 
