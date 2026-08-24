@@ -123,16 +123,20 @@ static const Frame F_SLEEP[] = {
 // up". Driving them to opposite numbers (the obvious guess) makes both hands go
 // the same way instead — which was the bug.
 //
-// The head turns with the beat. If your head servo doesn't move, that is its
-// wiring, not this — the arms and head are driven identically.
+// The head takes its turn BETWEEN arm swaps, never at the same instant. On a
+// small supply, three servos moving together starves one of them (the head was
+// the one that lost out). This way only the two arms ever move at once, and the
+// head gets its own beat while the arms hold — so all three actually move.
 static const Frame F_67[] = {
-  {{ -1,  55,  15,  15 }, 260},   // left up + right down, head one way
-  {{ -1, 125, 165, 165 }, 260},   // left down + right up, head the other
-  {{ -1,  55,  15,  15 }, 260},
-  {{ -1, 125, 165, 165 }, 260},
-  {{ -1,  55,  15,  15 }, 260},
-  {{ -1, 125, 165, 165 }, 260},
-  {{ -1,  90,  90,  90 },   0},   // back to centre
+  {{ -1,  -1,  15,  15 }, 90},   // arms: left up, right down
+  {{ -1,  55,  -1,  -1 }, 90},   // head turns (arms holding)
+  {{ -1,  -1, 165, 165 }, 90},   // arms swap: left down, right up
+  {{ -1, 125,  -1,  -1 }, 90},   // head turns back
+  {{ -1,  -1,  15,  15 }, 90},
+  {{ -1,  55,  -1,  -1 }, 90},
+  {{ -1,  -1, 165, 165 }, 90},
+  {{ -1, 125,  -1,  -1 }, 90},
+  {{ -1,  90,  90,  90 },  0},   // back to centre
 };
 
 static const Pose POSES[] = {
