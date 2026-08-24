@@ -48,7 +48,10 @@ folder to `C:\Workshop`, then proves the whole thing by compiling
 half-way can just be run again. Use `-Dest "C:\dev\Mousa Project"` to put the
 folder somewhere else.
 
-This covers items 1, 2, 3 and 5. **Not item 4** — see [The robot](#the-robot-needs-one-more-step).
+That covers all five items, the esp8266 core included — provided Mousa's
+machine had the core installed when the stick was packed. If it didn't, `-Pack`
+says so and everything except the robot still works. See
+[The robot](#the-robot).
 
 ## Route B — no stick
 
@@ -60,9 +63,11 @@ Same end state, done by hand.
    `pip install pyserial`.
 3. **Library Manager** (Tools → Manage Libraries): `Adafruit SSD1306` and
    `DHT sensor library`. Adafruit GFX and BusIO come along as dependencies.
-4. Then run `.\setup-workshop.ps1` as Administrator anyway. With the toolchain
-   and libraries already present it skips them, does the folder copy, and still
-   runs the compile check — which is the actual proof that steps 1–3 landed.
+4. **Boards Manager** (Tools → Board → Boards Manager): `esp8266` by ESP8266
+   Community, version **3.1.2**. Robot only — skip it if there's no robot.
+5. Then run `.\setup-workshop.ps1` as Administrator anyway. With everything
+   already present it skips each step, does the folder copy, and still runs the
+   compile check — the actual proof that steps 1–4 landed.
 
 ## COM ports — the part that differs on every machine
 
@@ -104,11 +109,10 @@ The robot needs none of this: its `flash.ps1` finds the board by looking for a
 CH340 or CP210x USB-serial chip, and `-Port COM5` overrides that if it guesses
 wrong.
 
-## The robot needs one more step
+## The robot
 
-Boards Manager (Tools → Board → Boards Manager): install **esp8266 by ESP8266
-Community, version 3.1.2**. Not "latest" — `robot/flash.ps1` looks for the core
-at exactly
+The robot needs the **esp8266 core, version 3.1.2** — not "latest".
+`robot/flash.ps1` looks for it at exactly
 
 ```
 %LOCALAPPDATA%\Arduino15\packages\esp8266\hardware\esp8266\3.1.2
@@ -116,11 +120,15 @@ at exactly
 
 and stops with `esp8266 core 3.1.2 not found` if it isn't there.
 
-The USB stick does not carry this. `-Pack` copies the IDE folder and the
-libraries folder, and the board cores live in neither — they sit under
-`Arduino15`, which is untouched. The compile check at the end of setup builds
-`parking_serial`, an Uno sketch, so it passes whether or not the esp8266 core
-exists. The robot is the one project that can still fail after a green setup run.
+Board cores don't live under the IDE folder — they sit under `Arduino15`, which
+is a separate place entirely. `setup-workshop.ps1` packs and installs that
+folder alongside the toolchain, so the stick route covers it. Installing by hand
+means the Boards Manager step above.
+
+Missing core is a warning, not a failure: the other four projects compile
+without it, so a PC with no robot still reports `READY.` The compile check adds
+a robot build whenever the core is present, which is what catches a core that
+installed but didn't work.
 
 Also copy `robot/robot/secrets.example.h` to `robot/robot/secrets.h` and fill in
 the wifi name and password. That file is gitignored and isn't on the stick
@@ -148,8 +156,10 @@ Fine on a home or venue network you trust; don't leave it running on an open one
 
 ## Checking it worked
 
-1. `.\setup-workshop.ps1` ends with `READY.` and a successful compile. That one
-   compile exercises the toolchain, the libraries and the folder copy together.
+1. `.\setup-workshop.ps1` ends with `READY.` and a successful compile of
+   `parking_serial` — which exercises the toolchain, the libraries and the
+   folder copy together — plus a compile of `robot` if the esp8266 core is
+   installed. Two greens means both toolchains work.
 2. Double-click `Start Workshop.bat`. The hub opens on
    <http://127.0.0.1:8080> showing six cards — the five projects plus the
    paused public site. The hub skips its own folder, so it never lists itself.

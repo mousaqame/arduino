@@ -1,7 +1,8 @@
 <#
 .SYNOPSIS
   Put the whole Workshop on a PC in one step: Python, pyserial, the Arduino
-  toolchain, the libraries, and this folder - then prove it works by compiling.
+  toolchain, the libraries, the esp8266 board core and this folder - then prove
+  it works by compiling.
 
 .DESCRIPTION
   Two roles, one file.
@@ -10,8 +11,8 @@
 
       .\setup-workshop.ps1 -Pack -Out E:\
 
-  That copies the Arduino toolchain, the libraries and this whole folder onto a
-  USB stick, together with this script.
+  That copies the Arduino toolchain, the libraries, the esp8266 board core and
+  this whole folder onto a USB stick, together with this script.
 
   On each NEW PC, plug the stick in and run (as Administrator):
 
@@ -47,6 +48,11 @@ $ErrorActionPreference = 'Stop'
 $here = $PSScriptRoot
 $ideDir = 'C:\Program Files (x86)\Arduino'
 $libDir = Join-Path $env:USERPROFILE 'Documents\Arduino\libraries'
+# Board cores live here, NOT under the IDE folder - which is why copying the
+# IDE and the libraries alone leaves the robot unable to compile.
+$pkgDir = Join-Path $env:LOCALAPPDATA 'Arduino15\packages'
+$espDir = Join-Path $pkgDir 'esp8266'
+$espCore = Join-Path $espDir 'hardware\esp8266\3.1.2'
 
 function Say  ($m) { Write-Host "  $m" }
 function Step ($m) { Write-Host "`n==> $m" -ForegroundColor Cyan }
@@ -85,6 +91,21 @@ if ($Pack) {
     Warn "No libraries at $libDir - target PCs will fail to compile the OLED sketches."
   }
 
+  Step 'esp8266 core'
+  if (Test-Path $espCore) {
+    $espZip = Join-Path $stick 'esp8266-core.zip'
+    if (Test-Path $espZip) { Remove-Item $espZip -Force }
+    Say 'compressing - the xtensa toolchain is large, give it a few minutes'
+    # The whole esp8266 folder, not just hardware\: robot flash.ps1 also needs
+    # tools\python3 and the esptool that sit beside it.
+    Compress-Archive -Path "$espDir\*" -DestinationPath $espZip
+    Ok ("esp8266-core.zip  {0:N0} MB" -f ((Get-Item $espZip).Length / 1MB))
+  } else {
+    Warn "No esp8266 core at $espCore - target PCs will not compile the robot."
+    Say  'Install it here first: Arduino IDE -> Tools -> Board -> Boards Manager'
+    Say  '-> esp8266 by ESP8266 Community -> 3.1.2, then run -Pack again.'
+  }
+
   Step 'Workshop folder'
   $wsOut = Join-Path $stick 'Workshop'
   if (Test-Path $wsOut) { Remove-Item $wsOut -Recurse -Force }
@@ -121,7 +142,7 @@ $problems = @()
 
 # ---- 1. Python -----------------------------------------------------------
 
-Step '1/6  Python'
+Step '1/7  Python'
 function Test-Python ($exe) {
   # Ask it. Inspecting the file lies both ways: the WindowsApps python.exe is a
   # 0-byte execution alias that works fine, while plenty of real python.exe files
@@ -163,7 +184,7 @@ if ($py) {
 
 # ---- 2. pyserial ---------------------------------------------------------
 
-Step '2/6  pyserial'
+Step '2/7  pyserial'
 if ($py) {
   $has = & $py -c "import serial; print(serial.__version__)" 2>$null
   if ($LASTEXITCODE -eq 0) {
@@ -180,7 +201,7 @@ if ($py) {
 
 # ---- 3. Arduino toolchain ------------------------------------------------
 
-Step '3/6  Arduino toolchain (1.8.x)'
+Step '3/7  Arduino toolchain (1.8.x)'
 $builder = Join-Path $ideDir 'arduino-builder.exe'
 if (Test-Path $builder) {
   Ok "already at $ideDir"
@@ -203,7 +224,7 @@ if (Test-Path $builder) {
 
 # ---- 4. Libraries --------------------------------------------------------
 
-Step '4/6  Libraries'
+Step '4/7  Libraries'
 $needed = @('Adafruit_GFX_Library', 'Adafruit_SSD1306', 'DHT_sensor_library')
 $zip = Join-Path $here 'libraries.zip'
 if (Test-Path $zip) {
@@ -227,9 +248,31 @@ if (Test-Path $libDir) {
   }
 }
 
-# ---- 5. The Workshop folder ---------------------------------------------
+# ---- 5. esp8266 board core ----------------------------------------------
 
-Step "5/6  Workshop folder -> $Dest"
+Step '5/7  esp8266 core (the robot only)'
+if (Test-Path $espCore) {
+  Ok "already at $espCore"
+} else {
+  $zip = Join-Path $here 'esp8266-core.zip'
+  if (Test-Path $zip) {
+    Say 'extracting - a few minutes'
+    New-Item -ItemType Directory -Force -Path $espDir | Out-Null
+    Expand-Archive -Path $zip -DestinationPath $espDir -Force
+    if (Test-Path $espCore) { Ok "installed to $espCore" }
+    else { Bad 'extracted but the 3.1.2 core folder is missing'; $problems += 'esp8266' }
+  } else {
+    # Not counted as a problem: four of the five projects compile without it,
+    # so a PC with no robot is still a working PC.
+    Warn 'no esp8266-core.zip - everything except the robot will still work'
+    Say  'To add it: Arduino IDE -> Tools -> Board -> Boards Manager'
+    Say  '-> esp8266 by ESP8266 Community -> version 3.1.2 (not latest).'
+  }
+}
+
+# ---- 6. The Workshop folder ---------------------------------------------
+
+Step "6/7  Workshop folder -> $Dest"
 $src = if (Test-Path (Join-Path $here 'Workshop')) { Join-Path $here 'Workshop' } else { $here }
 if ((Resolve-Path $src).Path -eq (Resolve-Path $Dest -ErrorAction SilentlyContinue).Path) {
   Ok 'already in place'
@@ -240,9 +283,9 @@ if ((Resolve-Path $src).Path -eq (Resolve-Path $Dest -ErrorAction SilentlyContin
   else { Bad "copy failed - no hub\hub.py at $Dest"; $problems += 'workshop' }
 }
 
-# ---- 6. Prove it ---------------------------------------------------------
+# ---- 7. Prove it ---------------------------------------------------------
 
-Step '6/6  Compile check'
+Step '7/7  Compile check'
 $flash = Join-Path $Dest 'arduino\flash.ps1'
 if ($NoVerify) {
   Say 'skipped (-NoVerify)'
@@ -255,6 +298,24 @@ if ($NoVerify) {
     if ($LASTEXITCODE -eq 0) { Ok 'compiles - this PC is ready' }
     else { Bad "compile failed (exit $LASTEXITCODE)"; $problems += 'compile' }
   } finally { Pop-Location }
+
+  # An Uno sketch proves the AVR toolchain and nothing else. The robot uses a
+  # different core, a different compiler and its own python, so it needs its
+  # own check - otherwise this script can finish green on a PC where the one
+  # project people most want to demo does not build.
+  $robotFlash = Join-Path $Dest 'robot\flash.ps1'
+  if ((Test-Path $espCore) -and (Test-Path $robotFlash)) {
+    Say 'compiling robot - the esp8266 core is here, so check it as well'
+    Push-Location (Split-Path $robotFlash)
+    try {
+      & powershell -NoProfile -ExecutionPolicy Bypass -File $robotFlash `
+          -Sketch robot -VerifyOnly *>&1 | Select-Object -Last 4
+      if ($LASTEXITCODE -eq 0) { Ok 'robot compiles too' }
+      else { Bad "robot compile failed (exit $LASTEXITCODE)"; $problems += 'robot-compile' }
+    } finally { Pop-Location }
+  } elseif (-not (Test-Path $espCore)) {
+    Say 'robot skipped - no esp8266 core on this PC'
+  }
 } else {
   Warn 'skipped - flash.ps1 or the toolchain is missing'
 }
