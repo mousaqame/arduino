@@ -114,6 +114,18 @@ static const Frame F_SLEEP[] = {
   {{ 90, 40, 25, 25 }, 0},
 };
 
+// The "six seven" hand gesture: one arm up while the other is down, then swap,
+// back and forth. A little head bob rides along with it.
+static const Frame F_67[] = {
+  {{ -1, 80, 160,  30 }, 130},
+  {{ -1, 100, 30, 160 }, 130},
+  {{ -1, 80, 160,  30 }, 130},
+  {{ -1, 100, 30, 160 }, 130},
+  {{ -1, 80, 160,  30 }, 130},
+  {{ -1, 100, 30, 160 }, 130},
+  {{ -1, 90,  90,  90 },   0},
+};
+
 static const Pose POSES[] = {
   { "wave",      "Wave",       F_WAVE,  sizeof(F_WAVE)  / sizeof(Frame), 180 },
   { "dance",     "Dance",      F_DANCE, sizeof(F_DANCE) / sizeof(Frame), 220 },
@@ -121,6 +133,7 @@ static const Pose POSES[] = {
   { "nod",       "Nod",        F_NOD,   sizeof(F_NOD)   / sizeof(Frame), 130 },
   { "shake",     "Shake head", F_SHAKE, sizeof(F_SHAKE) / sizeof(Frame), 150 },
   { "shrug",     "Shrug",      F_SHRUG, sizeof(F_SHRUG) / sizeof(Frame), 110 },
+  { "sixseven",  "6 7",        F_67,    sizeof(F_67)    / sizeof(Frame), 200 },
   { "scan",      "Look around",F_SCAN,  sizeof(F_SCAN)  / sizeof(Frame),  45 },
   { "lookleft",  "Look left",  F_LOOKL, 1,  90 },
   { "lookright", "Look right", F_LOOKR, 1,  90 },
