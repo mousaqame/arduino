@@ -114,17 +114,24 @@ static const Frame F_SLEEP[] = {
   {{ 90, 40, 25, 25 }, 0},
 };
 
-// The "six seven" hand gesture: one arm up while the other is down, then swap,
-// back and forth — and the head turns toward whichever hand is raised, so it
-// swings with the beat instead of sitting still. Head range is 30..150, so 55
-// and 125 are a big, clearly-visible turn each way.
+// The "six seven" hand gesture: one hand up while the other is down, then swap.
+//
+// The two arms are mirror-mounted, so the SAME servo angle puts them in
+// OPPOSITE physical positions. Measured on the robot: left hand is fully up
+// near 15 deg, right hand is fully down near 15 deg. So both servos moving to
+// 15 together means "left up, right down"; both to 165 means "left down, right
+// up". Driving them to opposite numbers (the obvious guess) makes both hands go
+// the same way instead — which was the bug.
+//
+// The head turns with the beat. If your head servo doesn't move, that is its
+// wiring, not this — the arms and head are driven identically.
 static const Frame F_67[] = {
-  {{ -1,  55, 160,  30 }, 260},   // left hand up, head turns left
-  {{ -1, 125,  30, 160 }, 260},   // right hand up, head turns right
-  {{ -1,  55, 160,  30 }, 260},
-  {{ -1, 125,  30, 160 }, 260},
-  {{ -1,  55, 160,  30 }, 260},
-  {{ -1, 125,  30, 160 }, 260},
+  {{ -1,  55,  15,  15 }, 260},   // left up + right down, head one way
+  {{ -1, 125, 165, 165 }, 260},   // left down + right up, head the other
+  {{ -1,  55,  15,  15 }, 260},
+  {{ -1, 125, 165, 165 }, 260},
+  {{ -1,  55,  15,  15 }, 260},
+  {{ -1, 125, 165, 165 }, 260},
   {{ -1,  90,  90,  90 },   0},   // back to centre
 };
 
