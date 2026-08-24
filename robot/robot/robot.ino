@@ -115,15 +115,17 @@ static const Frame F_SLEEP[] = {
 };
 
 // The "six seven" hand gesture: one arm up while the other is down, then swap,
-// back and forth. A little head bob rides along with it.
+// back and forth — and the head turns toward whichever hand is raised, so it
+// swings with the beat instead of sitting still. Head range is 30..150, so 55
+// and 125 are a big, clearly-visible turn each way.
 static const Frame F_67[] = {
-  {{ -1, 80, 160,  30 }, 130},
-  {{ -1, 100, 30, 160 }, 130},
-  {{ -1, 80, 160,  30 }, 130},
-  {{ -1, 100, 30, 160 }, 130},
-  {{ -1, 80, 160,  30 }, 130},
-  {{ -1, 100, 30, 160 }, 130},
-  {{ -1, 90,  90,  90 },   0},
+  {{ -1,  55, 160,  30 }, 130},   // left hand up, head turns left
+  {{ -1, 125,  30, 160 }, 130},   // right hand up, head turns right
+  {{ -1,  55, 160,  30 }, 130},
+  {{ -1, 125,  30, 160 }, 130},
+  {{ -1,  55, 160,  30 }, 130},
+  {{ -1, 125,  30, 160 }, 130},
+  {{ -1,  90,  90,  90 },   0},   // back to centre
 };
 
 static const Pose POSES[] = {
@@ -235,8 +237,13 @@ void updateJoints(unsigned long now) {
     j.servo.write((int)lroundf(j.cur));
   }
 
-  if (gentle && !moving && seq == nullptr) {
-    if (idleSince == 0)                    idleSince = now;
+  // Once everything has settled and no move is running, let the servos go after
+  // a few seconds. A held servo constantly hunts for its position and twitches —
+  // worse with cheap servos and unsmoothed power — so releasing it is what stops
+  // the idle jitter. Any new command reattaches instantly via setTarget().
+  // (Previously this only happened in gentle mode.)
+  if (!moving && seq == nullptr) {
+    if (idleSince == 0)                     idleSince = now;
     else if (now - idleSince > RELAX_AFTER) detachAll();
   } else {
     idleSince = 0;
