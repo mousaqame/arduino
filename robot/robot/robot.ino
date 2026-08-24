@@ -119,12 +119,12 @@ static const Frame F_SLEEP[] = {
 // swings with the beat instead of sitting still. Head range is 30..150, so 55
 // and 125 are a big, clearly-visible turn each way.
 static const Frame F_67[] = {
-  {{ -1,  55, 160,  30 }, 130},   // left hand up, head turns left
-  {{ -1, 125,  30, 160 }, 130},   // right hand up, head turns right
-  {{ -1,  55, 160,  30 }, 130},
-  {{ -1, 125,  30, 160 }, 130},
-  {{ -1,  55, 160,  30 }, 130},
-  {{ -1, 125,  30, 160 }, 130},
+  {{ -1,  55, 160,  30 }, 260},   // left hand up, head turns left
+  {{ -1, 125,  30, 160 }, 260},   // right hand up, head turns right
+  {{ -1,  55, 160,  30 }, 260},
+  {{ -1, 125,  30, 160 }, 260},
+  {{ -1,  55, 160,  30 }, 260},
+  {{ -1, 125,  30, 160 }, 260},
   {{ -1,  90,  90,  90 },   0},   // back to centre
 };
 
@@ -135,7 +135,7 @@ static const Pose POSES[] = {
   { "nod",       "Nod",        F_NOD,   sizeof(F_NOD)   / sizeof(Frame), 130 },
   { "shake",     "Shake head", F_SHAKE, sizeof(F_SHAKE) / sizeof(Frame), 150 },
   { "shrug",     "Shrug",      F_SHRUG, sizeof(F_SHRUG) / sizeof(Frame), 110 },
-  { "sixseven",  "6 7",        F_67,    sizeof(F_67)    / sizeof(Frame), 200 },
+  { "sixseven",  "6 7",        F_67,    sizeof(F_67)    / sizeof(Frame), 110 },
   { "scan",      "Look around",F_SCAN,  sizeof(F_SCAN)  / sizeof(Frame),  45 },
   { "lookleft",  "Look left",  F_LOOKL, 1,  90 },
   { "lookright", "Look right", F_LOOKR, 1,  90 },
