@@ -10,8 +10,9 @@ __pycache__/
 **/__pycache__/
 *.pyc
 
-# WiFi credentials — the robot reads these, they never leave this machine
-robot/robot/secrets.h
+# WiFi credentials — the robot reads these, they never leave this machine.
+# The glob covers secrets.h and any kept copy like secrets.h.disabled.
+robot/robot/secrets.h*
 
 # Vercel's local project link, written by `vercel` in web/. Machine-specific,
 # and there is no reason for it to be in a public repo.
