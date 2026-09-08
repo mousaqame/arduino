@@ -181,6 +181,27 @@
     border:1px dashed var(--line); border-radius:12px;
   }
 
+  /* ---- flash log ---- */
+  .sechead { display:flex; align-items:center; gap:12px; margin:38px 0 14px;
+             padding-bottom:9px; border-bottom:1px solid var(--line); }
+  .sechead h2 {
+    margin:0; font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--muted);
+  }
+  .flogwrap { border:1px solid var(--line); border-radius:12px; overflow-x:auto; background:var(--surface); }
+  table.flog { min-width:520px; }
+  table.flog { border-collapse:collapse; width:100%; font-size:13px; }
+  table.flog th {
+    text-align:left; padding:9px 15px; border-bottom:1px solid var(--line);
+    font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--muted); font-weight:650;
+  }
+  table.flog td {
+    padding:9px 15px; border-bottom:1px solid var(--line);
+    font-family:var(--mono); font-variant-numeric:tabular-nums;
+  }
+  table.flog tr:last-child td { border-bottom:none; }
+  table.flog td.board { font-family:inherit; font-weight:600; }
+  table.flog .none { padding:22px 15px; color:var(--muted); font-style:italic; font-family:inherit; }
+
   @media (prefers-reduced-motion: reduce) { * { transition:none !important; } }
 </style>
 </head>
@@ -203,6 +224,20 @@
 
   <div class="grid" id="grid"></div>
   <div id="unregWrap"></div>
+
+  <div class="sechead">
+    <h2>Flash log</h2>
+    <div class="grow"></div>
+    <button class="sm" id="clearFlog">Clear log</button>
+  </div>
+  <div class="flogwrap">
+    <table class="flog">
+      <thead>
+        <tr><th>Board</th><th>Sketch</th><th>COM port</th><th>Date / time</th></tr>
+      </thead>
+      <tbody id="flogBody"></tbody>
+    </table>
+  </div>
 </div>
 
 <dialog id="dlg">
@@ -442,12 +477,38 @@ $('create').onclick = async () => {
 
 $('q').addEventListener('input', e => { query = e.target.value.toLowerCase().trim(); render(); });
 
+// ---- flash log ----------------------------------------------------------
+
+async function loadFlashLog() {
+  let entries = [];
+  try {
+    const r = await fetch('/api/flashlog');   // server returns them newest first
+    entries = (await r.json()).entries || [];
+  } catch { /* leave empty; the row below says so */ }
+
+  $('flogBody').innerHTML = entries.length
+    ? entries.map(e => `<tr>
+        <td class="board">${esc(e.board)}</td>
+        <td>${esc(e.sketch)}</td>
+        <td>${esc(e.port)}</td>
+        <td>${esc(e.timestamp)}</td>
+      </tr>`).join('')
+    : `<tr><td class="none" colspan="4">No successful flashes yet.</td></tr>`;
+}
+
+$('clearFlog').onclick = async () => {
+  if (!confirm('Clear the entire flash log? This cannot be undone.')) return;
+  await post('/api/flashlog/clear');
+  loadFlashLog();
+};
+
 // ---- polling ------------------------------------------------------------
 
 load();
+loadFlashLog();
 setInterval(() => {
   const anyRunning = data.projects.some(p => (p.apps || []).some(a => a.state?.running));
-  if (anyRunning || document.visibilityState === 'visible') load();
+  if (anyRunning || document.visibilityState === 'visible') { load(); loadFlashLog(); }
 }, 5000);
 </script>
 </body>

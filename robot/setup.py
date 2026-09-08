@@ -31,6 +31,14 @@ from serial.tools import list_ports
 
 HERE = Path(__file__).resolve().parent
 
+# Shared flash log lives at the workshop root (this project's parent). Import the
+# same module the hub uses, so a successful flash here shows up in the hub's log.
+import sys
+sys.path.insert(0, str(HERE.parent))
+import flashlog  # noqa: E402
+
+FLASH_LOG_BOARD = "NodeMCU ESP8266"
+
 # NodeMCU boards use one of these USB-serial bridges.
 BRIDGE_RE = re.compile(r"CH34|CP210|Silicon\s*Labs|USB-SERIAL|wch", re.I)
 ADDR_RE = re.compile(r"https?://[\d.]+|[\w-]+\.local")
@@ -137,6 +145,14 @@ class Setup:
             if code != 0:
                 self.emit(f"That didn't work (error code {code}). The messages above say why.", "error")
                 return
+
+            # The upload itself succeeded (code == 0). Record it now — only on
+            # success — before the separate WiFi-address watch, which is not part
+            # of whether the flash worked.
+            try:
+                flashlog.append(FLASH_LOG_BOARD, "Servo Robot", port)
+            except Exception as exc:
+                self.emit(f"(flash worked, but the log couldn't be written: {exc})", "warn")
 
             self.emit("Code sent. Listening for the robot to say where it is…", "step")
             self._watch_serial(port, seconds=25)

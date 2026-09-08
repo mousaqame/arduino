@@ -28,6 +28,14 @@ import serial
 
 HERE = Path(__file__).resolve().parent
 
+# Shared flash log lives at the workshop root (this project's parent). Import the
+# same module the hub uses, so a successful flash here shows up in the hub's log.
+import sys
+sys.path.insert(0, str(HERE.parent))
+import flashlog  # noqa: E402
+
+FLASH_LOG_BOARD = "Arduino Uno"
+
 TELEM_RE = re.compile(r"^T (\d+) (-?[\d.]+) (-?[\d.]+) (\S+)$")
 CFG_RE = re.compile(r"^OK CFG (.+)$")
 
@@ -271,6 +279,13 @@ class Flasher:
 
             if code == 0:
                 self._emit("Done! Your Arduino is running the new code.", "ok")
+                # Only here, in the success branch, is a flash recorded. A failed
+                # upload (code != 0) never reaches this line, so it never logs.
+                try:
+                    title = SKETCH_INFO.get(sketch, {}).get("title", sketch)
+                    flashlog.append(FLASH_LOG_BOARD, title, self.port)
+                except Exception as exc:
+                    self._emit(f"(flash worked, but the log couldn't be written: {exc})", "warn")
             else:
                 self._emit(f"That didn't work (error code {code}). The messages above say why.", "error")
         except OSError as exc:

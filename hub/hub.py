@@ -24,6 +24,7 @@ import os
 import re
 import socket
 import subprocess
+import sys
 import threading
 import time
 import webbrowser
@@ -33,6 +34,13 @@ from pathlib import Path
 from urllib.parse import unquote, urlparse
 
 HERE = Path(__file__).resolve().parent
+
+# The shared flash log lives at the workshop root (hub's parent), alongside the
+# project folders that write to it. Put the root on the path so we import the
+# very same module the dashboards do.
+sys.path.insert(0, str(HERE.parent))
+import flashlog  # noqa: E402
+
 MANIFEST = "project.json"
 SLUG_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,40}$")
 
@@ -365,6 +373,11 @@ def make_handler(ws: Workshop, runner: Runner):
                 self._json(self._catalog())
                 return
 
+            if path == "/api/flashlog":
+                # Newest first, as the UI shows them.
+                self._json({"entries": list(reversed(flashlog.read_all()))})
+                return
+
             if path.startswith("/doc/"):
                 self._doc(path[len("/doc/"):])
                 return
@@ -398,6 +411,10 @@ def make_handler(ws: Workshop, runner: Runner):
 
                 if path == "/api/stop":
                     return self._json({"ok": True, "result": runner.stop(str(body.get("key", "")))})
+
+                if path == "/api/flashlog/clear":
+                    flashlog.clear()
+                    return self._json({"ok": True})
 
             except ValueError as exc:
                 return self._json({"ok": False, "error": str(exc)}, 400)
@@ -470,6 +487,11 @@ def main() -> None:
     root = Path(args.root).resolve()
     if not root.is_dir():
         raise SystemExit(f"not a folder: {root}")
+
+    # Create flash_log.json if it isn't there yet. Seed a single labelled test
+    # row on first creation only, so the log display can be verified before any
+    # real flash — real flashes then append above it, and a restart keeps it.
+    flashlog.ensure_exists(seed_test_row=True)
 
     ws = Workshop(root)
     runner = Runner(ws)

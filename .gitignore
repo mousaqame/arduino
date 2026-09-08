@@ -10,6 +10,10 @@ __pycache__/
 **/__pycache__/
 *.pyc
 
+# Flash log — runtime data written by the dashboards, machine-specific.
+flash_log.json
+flash_log.json.tmp
+
 # WiFi credentials — the robot reads these, they never leave this machine.
 # The glob covers secrets.h and any kept copy like secrets.h.disabled.
 robot/robot/secrets.h*
