@@ -1,0 +1,62 @@
+{
+  "name": "Steering Wheel",
+  "slug": "steering-wheel",
+  "summary": "The DIY force-feedback wheel: an Arduino Leonardo running EMC Lite, plus a configuration and calibration tool being built around it for pedals, an H-shifter and the wheel itself.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-08-12",
+  "tags": [
+    "leonardo",
+    "emc",
+    "force-feedback",
+    "hid",
+    "sim-racing",
+    "steering-wheel",
+    "wheelforge",
+    "winforms",
+    "arduino-cli"
+  ],
+  "hardware": [
+    "Arduino Leonardo running EMCLite0932.hex - flashed with XLoader, NOT an Arduino sketch. Uploading any sketch erases it.",
+    "USB identity VID_0013 PID_1984, appears as 'HID-compliant game controller', named 'EMC' in the DirectInput registry",
+    "Encoder A/B on D0/D1, motor driver on D8-D11, status output on D13",
+    "Buttons are a 4x4 matrix: columns D5/D6/D7/D12, rows D14/D15/D16/D4. A button to GND never registers.",
+    "Planned: potentiometer pedals (throttle/brake/clutch) and a two-pot H-shifter on the analog pins"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "EMC Lite wiring notes",
+      "path": "WIRING.md"
+    },
+    {
+      "label": "WheelForge app",
+      "path": "wheelforge/README.md"
+    },
+    {
+      "label": "WheelForge firmware",
+      "path": "wheelforge/firmware/README.md"
+    },
+    {
+      "label": "Wiring, per board",
+      "path": "wheelforge/firmware/WIRING.md"
+    },
+    {
+      "label": "HID layer (prototype)",
+      "path": "hid_win.py"
+    }
+  ],
+  "apps": [
+    {
+      "label": "WheelForge",
+      "kind": "windows-exe",
+      "build": "wheelforge/build.ps1",
+      "exe": "wheelforge/build/WheelForge.exe",
+      "installer": "wheelforge/dist/WheelForge-Setup-0.3.0.exe"
+    }
+  ],
+  "notes": "WheelForge v0.3 (wheelforge/) is an open configurator for DIY FFB wheels, in the shape of the EMC utility but multi-board. Pages: Monitor, Calibration, Wheel test, Firmware, Boards, Output mode, About. APP BUILD: csc.exe from C:\\Windows\\Microsoft.NET\\Framework64\\v4.0.30319 - the compiler inside Windows - so no SDK, no NuGet, no project file; ~225KB exe runs anywhere .NET Framework 4.x is, which is every Win10/11 box. Cost is C# 5 syntax only. build.ps1 -Installer makes a per-user Inno Setup installer (no UAC) that also ships all firmware images. SerialPort is in System.dll on .NET Framework, NOT System.IO.Ports.dll. FIRMWARE: one sketch (firmware/wheelforge) builds for TEN boards; boards.h picks the pin map and the transport from the compiler's board defines. Boards with USB device hardware (Leonardo, Micro, Pico, ESP32-S2/S3) enumerate as real HID controllers. Boards without (Uno, Mega, Nano, ESP32 classic, ESP8266) stream framed binary over serial and the app feeds vJoy - vJoyInterface.dll is at C:\\Program Files\\vJoy\\x64. All ten compile; NONE tested on hardware. Settings (encoder PPR, rotation, invert, torque ceiling, driver type) live in EEPROM and are set from the Wheel test page over a line-based serial protocol; replies come back framed (A5 5A type len payload xor) so one parser handles both input and text. FFB IN GAMES WORKS on the five native-USB boards: the firmware declares a full HID PID interface (constant, ramp, square, sine, triangle, sawtooth, spring, damper, inertia, friction, plus envelopes and gains), 12 effect blocks on a 32u4 and 20 elsewhere. Bridge boards cannot have it - a game has to send reports to the device and they have no USB. CRITICAL: the stock Arduino AVR HID library declares no OUT endpoint, so FFB can never reach a 32u4 through it; usb_avr.h is a replacement PluggableUSB module with both directions and <HID.h> must NOT be included alongside it. check_descriptor.py now pins each PID report's wire size to what ffb.h parses, which caught the parser reading effect gain and direction one byte too far into Set Effect. Safety: effects expire after 3s unless the app refreshes them (keepalive lives in WheelLink, not the UI), motor pins are INPUT when idle, MAXTORQUE is clamped inside motorWrite and defaults to 30%, and the UI needs an arm checkbox. GOTCHAS worth keeping: the AVR HID descriptor MUST be PROGMEM (the core reads it with TRANSFER_PGM; a RAM pointer enumerates garbage silently). PowerShell 5.1 turns a native exe's stderr into a terminating error under ErrorActionPreference Stop - the ESP8266 core prints its size report to stderr, which failed a good build. WinForms docks children from the last added backwards, so BringToFront on a docked sibling hides a page's first row; Card carves its title out of DisplayRectangle, but children placed at absolute coordinates bypass that and must step over the title by hand. TESTS, no hardware needed: firmware/check_descriptor.py (descriptor bits vs the C struct, and it refuses to skip unresolved tokens after an earlier version silently validated the wrong descriptor), plus a console harness with 39 assertions over the calibration maths and profile round trip. NEXT: test on hardware; HID PID force feedback so games can feel it; the ATmega16U2 side to make Uno/Mega real USB controllers; Logitech identity mode. STATUS 2026-09-04: v0.3 installed and running. Uno verified on hardware over the serial bridge (firmware runs, streams input, answers the settings protocol, encoder counts move). Nothing else tested on hardware - no HID board, no motor, no FFB. NEXT: rewire the KY-040 as CLK->D2 DT->D3 (SW is the push button, not a channel - that was why steering failed), then check calibration on the Uno and anything involving a motor. BUGS FIXED worth remembering: (1) opening the port resets an Uno, so the single '?' sent on connect was lost to the bootloader, the pin fields stayed at -1 and Apply wrote them, switching the encoder and pedals off - the app now retries until the board answers and gates Apply/Save on having read the config; (2) pin scan pulled every pin to INPUT_PULLUP including motor driver inputs, which on an IBT-2 means a driver told to go - it now skips motor pins and expires after 45s; (3) never run two arduino-cli builds concurrently, they share a sketch cache and corrupt each other; (4) the installer must not clear the install folder while the app runs - it now checks a mutex and refuses if the exe is still present."
+}

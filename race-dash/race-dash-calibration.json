@@ -1,0 +1,20 @@
+{
+  "gauges": {
+    "rpm": {
+      "zero_us": 2300,
+      "full_us": 670,
+      "trim_us": 0
+    },
+    "speed": {
+      "zero_us": 2200,
+      "full_us": 400,
+      "trim_us": -87
+    }
+  },
+  "steer": {
+    "center": 0,
+    "left": -32768,
+    "right": 32767,
+    "invert": false
+  }
+}

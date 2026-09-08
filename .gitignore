@@ -5,6 +5,11 @@ gravixar-hq/
 .build/
 **/.build/
 
+# Arduino CLI / arduino-cli compile output (folder is named build/, not .build/)
+# — tens of MB of .elf/.map/.bin per board, all regenerable.
+**/firmware/**/build/
+**/sketch/**/build/
+
 # Python
 __pycache__/
 **/__pycache__/

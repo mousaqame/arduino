@@ -1,0 +1,2345 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race Dash</title>
+<style>
+  :root{
+    --ground:#0a0e11; --panel:#121a1e; --sunken:#0d1417; --ink:#e2ecec;
+    --muted:#849699; --line:#1f2c32; --accent:#2dd4bf;
+    /* One step below --muted, for the things that are present but not being
+       read: the un-pressed wheel buttons and the "no wheel" fallback. Still
+       5.4:1 on --sunken, so it is dim rather than unreadable. */
+    --dim:#7c8d90;
+    --good:#22c55e; --warn:#f59e0b; --bad:#ef4444; --info:#38bdf8;
+    --needle:#f1f5f9;
+    --shadow:0 1px 2px rgba(0,0,0,.35), 0 10px 28px rgba(0,0,0,.3);
+    --mono: ui-monospace,"Cascadia Mono",Consolas,"DejaVu Sans Mono",monospace;
+
+    /* the glass */
+    --lcd-field:#93c83f; --lcd-field2:#77ad2c; --lcd-ink:#0d2109;
+    --oled-on:#e6f2ff; --oled-off:#05080b;
+  }
+  *{box-sizing:border-box}
+  html{color-scheme:dark}
+  body{margin:0;background:var(--ground);color:var(--ink);
+       font:15.5px/1.6 ui-sans-serif,system-ui,"Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+  .wrap{max-width:1220px;margin:0 auto;padding:0 20px 80px}
+
+  header{display:flex;align-items:center;gap:16px;padding:22px 0 0;flex-wrap:wrap}
+  header h1{margin:0;font-size:1.3rem;font-weight:670;letter-spacing:-.02em}
+  header h1 em{font-style:normal;color:var(--muted);font-weight:500;font-size:.8em;margin-left:8px}
+  .grow{flex:1}
+  .status{display:flex;align-items:center;gap:9px;font-size:13px;color:var(--muted);
+          font-variant-numeric:tabular-nums}
+  .dot{width:9px;height:9px;border-radius:50%;background:var(--bad);flex:none}
+  .dot.ok{background:var(--good);box-shadow:0 0 0 3px color-mix(in srgb,var(--good) 22%,transparent)}
+  .dot.warn{background:var(--warn);box-shadow:0 0 0 3px color-mix(in srgb,var(--warn) 20%,transparent)}
+
+  .tabs{display:flex;gap:4px;margin:18px 0 20px;border-bottom:1px solid var(--line)}
+  .tab{font:inherit;font-weight:560;cursor:pointer;background:none;border:none;color:var(--muted);
+       padding:10px 16px;border-bottom:2px solid transparent;margin-bottom:-1px}
+  .tab[aria-selected=true]{color:var(--accent);border-bottom-color:var(--accent)}
+
+  button{font:inherit;font-weight:550;cursor:pointer;border-radius:8px;border:1px solid var(--line);
+         background:var(--panel);color:var(--ink);padding:8px 15px}
+  button:hover:not(:disabled){border-color:var(--muted)}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#052e2b}
+  button.sm{padding:6px 12px;font-size:13.5px}
+  /* The inset left edge is the point: "which source is selected" must not be
+     carried by teal-vs-grey alone. */
+  button.on{border-color:var(--accent);color:var(--accent);font-weight:670;
+            background:color-mix(in srgb,var(--accent) 12%,transparent);
+            box-shadow:inset 3px 0 0 var(--accent);padding-left:18px}
+  button.sm.on{padding-left:15px}
+  button.hot{border-color:var(--warn);color:var(--warn)}
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:18px;
+         box-shadow:var(--shadow);min-width:0}
+  .panel h2{margin:0 0 14px;font-size:11px;font-weight:660;letter-spacing:.14em;
+            text-transform:uppercase;color:var(--muted);display:flex;gap:10px;align-items:baseline;
+            flex-wrap:wrap}
+  /* Not a color-mix down from --muted: at 11.5px that landed near 3.8:1 on
+     --panel, and this is the text that explains what each panel is. */
+  .panel h2 i{font-style:normal;letter-spacing:0;text-transform:none;font-weight:500;font-size:11.5px;
+              color:var(--muted)}
+  [hidden]{display:none !important}
+  .sub{color:var(--muted);font-size:12.5px;margin-top:9px}
+  .sub b{color:var(--ink);font-weight:600}
+  .btns{display:flex;flex-wrap:wrap;gap:7px}
+
+  /* ---------- offline banner ---------- */
+  .banner{display:flex;gap:13px;align-items:flex-start;background:var(--panel);
+          border:1px solid var(--line);border-left:3px solid var(--bad);
+          border-radius:0 11px 11px 0;padding:13px 17px;margin-bottom:16px}
+  .banner b{display:block;font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;
+            color:var(--bad);font-weight:660;margin-bottom:3px}
+  .banner p{margin:0;font-size:.93rem;color:var(--muted)}
+
+  /* ---------- hero ---------- */
+  .hero{background:var(--panel);border:1px solid var(--line);border-radius:14px;
+        box-shadow:var(--shadow);padding:18px 20px 16px;margin-bottom:16px}
+  .hero.dead{opacity:.5}
+  .heronums{display:grid;grid-template-columns:1.15fr .7fr 1.15fr;gap:14px;align-items:end}
+  /* Narrow: speed and rpm share the top row, gear drops to a strip underneath —
+     three big numbers side by side stop being readable below about 620px. */
+  @media (max-width:620px){
+    .heronums{grid-template-columns:1fr 1fr}
+    .hn.gear{order:3;grid-column:1/-1;text-align:left;display:flex;align-items:baseline;
+             gap:13px;margin-top:2px}
+    .hn.gear b{font-size:clamp(2.3rem,12vw,3.4rem)}
+    .hn.gear span{margin-top:0}
+  }
+  .hn{min-width:0}
+  .hn b{display:block;font-variant-numeric:tabular-nums;font-weight:750;letter-spacing:-.035em;
+        line-height:.92;font-size:clamp(2.7rem,8.4vw,5.6rem)}
+  .hn span{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+           color:var(--muted);margin-top:7px;font-weight:620}
+  .hn.gear{text-align:center}
+  .hn.gear b{color:var(--accent)}
+  .hn.rpm{text-align:right}
+  .hn.rpm span{text-align:right}
+  .hn.shift b{color:var(--bad)}
+
+  .revbar{display:flex;gap:2px;height:16px;margin-top:16px}
+  .revbar span{flex:1;border-radius:2px;background:var(--sunken);
+               border:1px solid color-mix(in srgb,var(--line) 70%,transparent)}
+  .revbar span.lit{background:var(--accent);border-color:var(--accent)}
+  .revbar span.red{border-color:color-mix(in srgb,var(--bad) 55%,var(--line))}
+  .revbar span.red.lit{background:var(--bad);border-color:var(--bad)}
+  .revbar.flash span{background:var(--bad);border-color:var(--bad)}
+  .revbar.flash span.lit{background:var(--sunken);border-color:var(--line)}
+
+  .pedals{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:14px}
+  .ped{display:flex;align-items:center;gap:9px;font-size:10.5px;letter-spacing:.13em;
+       text-transform:uppercase;color:var(--muted);font-weight:640}
+  .ped div{flex:1;height:9px;border-radius:5px;background:var(--sunken);
+           border:1px solid var(--line);overflow:hidden}
+  /* No transition: paint() rewrites this width every 50 ms, so an 80 ms
+     transition never finished — it just drew a damped, lagging copy of the
+     number printed next to it. The 20 Hz source is already smooth. */
+  .ped div i{display:block;height:100%;width:0;background:var(--good)}
+  .ped.brk div i{background:var(--bad)}
+  /* --- the steering wheel (a separate USB device from the dash boards) --- */
+  .wheelwrap{display:grid;grid-template-columns:150px 1fr;gap:18px;align-items:start}
+  @media (max-width:720px){ .wheelwrap{grid-template-columns:1fr} }
+  .wheelart{position:relative;width:100%;aspect-ratio:1;max-width:150px;margin:0 auto}
+  .wheelart svg{width:100%;height:100%;display:block}
+  .steerbar{height:9px;border-radius:5px;background:var(--sunken);position:relative;
+            overflow:hidden;margin:9px 0 4px}
+  /* Fill grows from the middle outward, so left lock and right lock read
+     differently at a glance rather than both looking like "some value". */
+  /* left/width are layout properties and paintWheel rewrites both every 50 ms,
+     so a 60 ms transition ran layout continuously and still never arrived. */
+  .steerbar i{position:absolute;top:0;height:100%;background:var(--accent)}
+  .steerbar b{position:absolute;left:50%;top:0;width:1px;height:100%;
+              background:var(--line);opacity:.9}
+  .btngrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(30px,1fr));
+           gap:4px;margin-top:9px}
+  .btngrid span{font-size:9.5px;text-align:center;padding:3px 0;border-radius:4px;
+                background:var(--sunken);color:var(--dim);
+                font-variant-numeric:tabular-nums;border:1px solid transparent}
+  .btngrid span.on{background:var(--good);color:#04120a;border-color:var(--good);
+                   font-weight:700}
+  .wheeloff{color:var(--dim);font-size:12px;line-height:1.55}
+  .ped u{text-decoration:none;font-variant-numeric:tabular-nums;width:3.2ch;text-align:right;color:var(--ink)}
+
+  /* ---------- layout ---------- */
+  .cols{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(280px,1fr);gap:16px;margin-bottom:16px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+  @media (max-width:940px){.cols,.two{grid-template-columns:1fr}}
+  .stack{display:flex;flex-direction:column;gap:16px;min-width:0}
+
+  /* ---------- the two screens ---------- */
+  .glass{display:flex;flex-direction:column;align-items:center;gap:6px}
+  .glass .cap{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+              align-self:flex-start;font-weight:620}
+  .glass.dead{filter:saturate(.25) brightness(.55)}
+  .bezel{background:#05080a;border:1px solid #253039;border-radius:7px;padding:9px;
+         box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), 0 3px 12px rgba(0,0,0,.5)}
+  /* Fallbacks first, `pixelated` last: it is the only one of the three the
+     spec defines as nearest-neighbour, so it has to be the one that wins. */
+  #oled{display:block;background:var(--oled-off);
+        image-rendering:-webkit-optimize-contrast;
+        image-rendering:crisp-edges;
+        image-rendering:pixelated}
+  .lcdframe{background:#0b1409;border:1px solid #2a3a22;border-radius:7px;padding:10px 12px;
+            box-shadow:inset 0 0 0 1px rgba(255,255,255,.04), 0 3px 12px rgba(0,0,0,.5)}
+  .lcd{display:grid;grid-template-columns:repeat(16,calc(var(--u) * 5));
+       grid-auto-rows:calc(var(--u) * 8);gap:var(--u);
+       background:linear-gradient(160deg,var(--lcd-field),var(--lcd-field2));
+       padding:calc(var(--u) * 2);border-radius:3px;
+       box-shadow:inset 0 0 calc(var(--u) * 6) rgba(0,0,0,.28)}
+  .lcd .c{position:relative;overflow:hidden;color:var(--lcd-ink);
+          font-family:var(--mono);font-size:calc(var(--u) * 7.3);line-height:calc(var(--u) * 8);
+          text-align:center;font-weight:700}
+  .lcd .c.blk::before{content:"";position:absolute;inset:0 auto 0 0;
+                      width:calc(var(--w) / 5 * 100%);background:var(--lcd-ink)}
+  .screenrow{display:flex;justify-content:space-between;width:100%;gap:12px;
+             font-size:11px;color:var(--muted);font-variant-numeric:tabular-nums}
+
+  /* ---------- readout list ---------- */
+  .kv{display:grid;grid-template-columns:auto 1fr;gap:6px 14px;font-size:13.5px;
+      font-variant-numeric:tabular-nums}
+  .kv dt{color:var(--muted);font-size:11px;letter-spacing:.1em;text-transform:uppercase;
+         align-self:center;font-weight:620}
+  .kv dd{margin:0;text-align:right;font-family:var(--mono);font-size:13px}
+  .kv dd.dim{color:var(--muted)}
+  .kv dd.bad{color:var(--bad)}
+  .kv dd.good{color:var(--good)}
+  .kv dd.warn{color:var(--warn)}
+
+  /* ---------- dials ---------- */
+  .dial{width:100%;max-width:340px;margin:0 auto;display:block}
+  .dial .face{fill:var(--sunken);stroke:var(--line);stroke-width:.6}
+  .dial .scale{fill:none;stroke:var(--muted);stroke-width:.8}
+  .dial .red{fill:none;stroke:var(--bad);stroke-width:2.4}
+  .dial .shiftarc{fill:none;stroke:var(--warn);stroke-width:1.1}
+  .dial .tkmaj{stroke:var(--ink);stroke-width:1.1}
+  .dial .tkmin{stroke:var(--muted);stroke-width:.5}
+  .dial .lab{fill:var(--ink);text-anchor:middle;dominant-baseline:central;font-weight:700;
+             font-family:ui-sans-serif,system-ui,sans-serif}
+  .dial .title{fill:var(--muted);text-anchor:middle;font-size:4.2px;letter-spacing:.3px;
+               font-family:ui-sans-serif,system-ui,sans-serif}
+  .dial .ndl path{fill:var(--needle)}
+  .dial .tgt path{fill:var(--accent)}
+  .dial .hub{fill:var(--panel);stroke:var(--ink);stroke-width:.9}
+  .dial.dead .ndl path{fill:var(--muted);opacity:.35}
+  .dial.dead .tgt{display:none}
+  .dial.parked .ndl path{fill:var(--warn)}
+
+  .gaugefoot{display:flex;align-items:baseline;gap:10px;margin-top:6px;flex-wrap:wrap}
+  .gaugefoot b{font-size:1.5rem;font-weight:700;font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+  .gaugefoot span{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:620}
+  /* never uppercase this one: it would turn µs into MS */
+  .gaugefoot .us{margin-left:auto;font-family:var(--mono);font-size:12.5px;color:var(--muted);
+                 text-transform:none;letter-spacing:0}
+
+  input[type=range]{width:100%;margin:14px 0 2px;accent-color:var(--accent);height:22px}
+  /* These two drive real servos. The UA ring on a range input is close to
+     invisible on a dark ground, so a keyboard user could not tell which needle
+     the next arrow key was about to move. */
+  input[type=range]:focus-visible{outline:2px solid var(--accent);outline-offset:3px;
+                                  border-radius:6px}
+  /* deliberately NOT text-transform:uppercase — it would render µs as MS */
+  .slrow{display:flex;justify-content:space-between;font-size:10.5px;letter-spacing:.11em;
+         color:var(--muted);font-weight:620}
+
+  /* ---------- source picker ---------- */
+  .srcs{display:flex;flex-wrap:wrap;gap:7px}
+  .hint{margin-top:11px;padding:10px 13px;background:var(--sunken);border:1px solid var(--line);
+        border-radius:9px;font-size:12.5px;color:var(--muted)}
+  .hint b{color:var(--ink)}
+  .cmdrow{display:flex;gap:7px;margin-top:12px}
+  .cmdrow input{flex:1;min-width:0;padding:8px 11px;font:13px/1.4 var(--mono);background:var(--sunken);
+                border:1px solid var(--line);color:var(--ink);border-radius:8px}
+  .cmdrow input:focus{outline:none;border-color:var(--accent)}
+
+  /* ---------- log ---------- */
+  #log{margin:0;padding:11px 13px;height:280px;overflow-y:auto;background:var(--sunken);
+       border:1px solid var(--line);border-radius:9px;font:12px/1.55 var(--mono);
+       color:var(--ink);white-space:pre-wrap;word-break:break-word}
+  #log span{display:block}
+  #log .k-rx{color:var(--ink)}
+  #log .k-tx{color:var(--accent)}
+  #log .k-info{color:var(--muted)}
+  #log .k-error{color:var(--bad)}
+  #log .k-local{color:var(--warn)}
+  .logbar{display:flex;gap:7px;align-items:center;margin-top:10px}
+
+  /* ---------- wiring tab ---------- */
+  .lede{font-size:1.05rem;color:var(--muted);max-width:70ch;margin:0 0 22px}
+  .tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:10px;background:var(--panel)}
+  table{border-collapse:collapse;width:100%;font-size:.92rem}
+  th,td{text-align:left;padding:8px 14px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:650;
+     white-space:nowrap;background:var(--sunken)}
+  tr:last-child td{border-bottom:none}
+  td.pin{font-family:var(--mono);font-weight:700;white-space:nowrap;color:var(--ink)}
+  td.why{color:var(--muted);font-size:.87rem}
+  tr.free td{color:var(--muted)}
+  tr.free td.pin{color:var(--muted);font-weight:600}
+  tr[data-use=lcd] td.pin{color:var(--accent)}
+  tr[data-use=oled] td.pin{color:var(--info)}
+  tr[data-use=servo] td.pin{color:var(--warn)}
+  tr[data-use=keep] td.pin{color:var(--bad)}
+  .trap{font-weight:700;color:var(--bad)}
+  .note,.danger{display:flex;flex-direction:column;gap:5px;background:var(--panel);
+        border:1px solid var(--line);border-radius:0 11px 11px 0;padding:14px 17px;margin:16px 0}
+  .note{border-left:3px solid var(--warn)}
+  .danger{border-left:3px solid var(--bad)}
+  .note b,.danger b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;font-weight:660}
+  .note b{color:var(--warn)} .danger b{color:var(--bad)}
+  .note p,.danger p{margin:0;font-size:.94rem;color:var(--muted)}
+  .note p em,.danger p em{font-style:normal;color:var(--ink);font-weight:600}
+  .legend{display:flex;flex-wrap:wrap;gap:14px;margin:0 0 14px;font-size:12px;color:var(--muted)}
+  .legend i{font-style:normal;font-weight:700;font-family:var(--mono)}
+  h3.sec{margin:28px 0 12px;font-size:1.05rem;font-weight:640}
+
+  /* ---------- calibration tab ---------- */
+  .calwrap{display:grid;grid-template-columns:190px minmax(0,1fr);gap:18px;align-items:start}
+  @media (max-width:720px){.calwrap{grid-template-columns:1fr}}
+  .calwrap .dial{max-width:190px}
+  .calrow{display:flex;align-items:center;gap:6px;margin-top:8px}
+  .calrow>b{font-size:10.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);
+            font-weight:640;width:4.4em;flex:none}
+  /* Wide enough for "-2300" and the spin buttons together: at 8ch the box
+     clipped four digits down to three, which is a terrible thing for a field
+     whose whole job is an exact number. */
+  .calrow input{width:11ch;padding:6px 9px;font:13px/1.4 var(--mono);background:var(--sunken);
+                border:1px solid var(--line);color:var(--ink);border-radius:8px;text-align:right}
+  .calrow input:focus{outline:none;border-color:var(--accent)}
+  /* deliberately NOT text-transform:uppercase — it would render µs as MS */
+  .calrow em{font-style:normal;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .calrow button{padding:5px 11px;font-family:var(--mono);font-size:14px;line-height:1.15}
+  .calrow .ram{margin-left:auto;font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+               color:var(--warn);font-weight:640}
+  .calerr{color:var(--bad);font-size:12.5px;margin-top:10px}
+  .sketchout{margin:13px 0 0;padding:11px 13px;max-height:360px;overflow:auto;background:var(--sunken);
+             border:1px solid var(--line);border-radius:9px;font:12px/1.55 var(--mono);
+             color:var(--ink);white-space:pre;-webkit-user-select:all;user-select:all}
+  .bigread{display:grid;grid-template-columns:1fr 1fr;gap:14px;align-items:end}
+  .bigread b{display:block;font-variant-numeric:tabular-nums;font-weight:750;letter-spacing:-.03em;
+             line-height:.95;font-size:clamp(2rem,6vw,3.3rem)}
+  .bigread span{display:block;font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+                color:var(--muted);margin-top:7px;font-weight:620}
+  .bigread .r{text-align:right}
+
+  /* ---------- every axis the wheel reports ---------- */
+  .axhead{font-size:10px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);
+          font-weight:620;margin:14px 0 7px}
+  .axes{display:grid;grid-template-columns:repeat(auto-fill,minmax(158px,1fr));gap:5px 16px}
+  .ax{display:flex;align-items:center;gap:7px}
+  /* Sized to fit, not fixed: a descriptor can name an axis anything, and a
+     clipped "Slider" is worse than two bars that do not quite line up. */
+  .ax b{font:600 10.5px/1.4 var(--mono);color:var(--muted);flex:none;
+        min-width:3.6ch;max-width:8ch;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .ax div{flex:1;min-width:24px;height:5px;border-radius:3px;background:var(--sunken);
+          border:1px solid var(--line);overflow:hidden}
+  .ax div i{display:block;height:100%;width:0;background:var(--muted)}
+  .ax u{text-decoration:none;font:12px/1.4 var(--mono);font-variant-numeric:tabular-nums;
+        color:var(--muted);width:6.5ch;flex:none;text-align:right}
+  .ax.steer b,.ax.steer u{color:var(--accent)}
+  .ax.steer div i{background:var(--accent)}
+  /* not .ped — that is the big pedal row above, and it would drag its own
+     height, letter-spacing and uppercasing in with it */
+  .ax.pedal b,.ax.pedal u{color:var(--ink)}
+  .ax.pedal div i{background:var(--good)}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>Race Dash <em>racedash_uno</em></h1>
+    <div class="grow"></div>
+    <!-- role=status implies aria-live=polite: "dashboard offline" has to be
+         announced, not just recoloured. The dot repeats what #conn already
+         says in words, so it is hidden from the tree. -->
+    <div class="status" role="status">
+      <span class="dot" id="dot" aria-hidden="true"></span><span id="conn">connecting…</span>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist" id="tablist" aria-label="Dashboard sections">
+    <button class="tab" id="tab-dash"   role="tab" aria-selected="true"  aria-controls="view-dash"   tabindex="0">Dash</button>
+    <button class="tab" id="tab-cal"    role="tab" aria-selected="false" aria-controls="view-cal"    tabindex="-1">Calibration</button>
+    <button class="tab" id="tab-wiring" role="tab" aria-selected="false" aria-controls="view-wiring" tabindex="-1">Wiring &amp; pins</button>
+  </div>
+
+  <!-- ==================== DASH ==================== -->
+  <section id="view-dash" role="tabpanel" tabindex="0" aria-labelledby="tab-dash">
+
+    <div class="banner" id="banner" role="alert" hidden>
+      <div>
+        <b id="banner-title">No board connected</b>
+        <p id="banner-text">Nothing is holding a serial port.</p>
+      </div>
+    </div>
+
+    <div class="hero" id="hero">
+      <div class="heronums">
+        <div class="hn"><b id="h-speed">—</b><span id="h-speed-u">MPH</span></div>
+        <div class="hn gear"><b id="h-gear">–</b><span>Gear</span></div>
+        <div class="hn rpm" id="h-rpm-box"><b id="h-rpm">—</b><span id="h-rpm-sub">RPM</span></div>
+      </div>
+      <div class="revbar" id="revbar"></div>
+      <div class="pedals">
+        <div class="ped"><span>Thr</span><div><i id="p-thr"></i></div><u id="v-thr">0</u></div>
+        <div class="ped brk"><span>Brk</span><div><i id="p-brk"></i></div><u id="v-brk">0</u></div>
+      </div>
+    </div>
+
+    <div class="cols">
+      <section class="panel">
+        <h2>On the glass <i>what the firmware is drawing right now</i></h2>
+        <div class="glass" id="glass">
+          <div class="cap">0.91&quot; OLED · 128 × 32 · SSD1306 @ 0x3C · A4/A5</div>
+          <div class="bezel"><canvas id="oled" width="128" height="32"></canvas></div>
+          <div class="cap" style="margin-top:10px">16 × 2 HD44780 · parallel, 4-bit</div>
+          <div class="lcdframe"><div class="lcd" id="lcd"></div></div>
+          <div class="screenrow">
+            <span id="glass-note">redrawn on the firmware's own clocks</span>
+            <span id="glass-clock">OLED 50 ms · LCD 120 ms</span>
+          </div>
+        </div>
+        <div class="sub">
+          Both panels are rebuilt from the live telemetry with the firmware's own maths — the
+          rev bar rounds the same way, the SHIFT flash uses the same 2 Hz and 8 Hz clocks, and
+          both blank to their waiting screens after <b>1.5 s</b> with no frame.
+        </div>
+      </section>
+
+      <div class="stack">
+        <section class="panel">
+          <h2>Telemetry</h2>
+          <dl class="kv">
+            <dt>Source</dt><dd id="k-source">off</dd>
+            <dt>Race</dt><dd id="k-race">—</dd>
+            <dt>Speed</dt><dd id="k-speed">—</dd>
+            <dt>RPM</dt><dd id="k-rpm">—</dd>
+            <dt>Max RPM</dt><dd id="k-max">—</dd>
+            <dt>Gear</dt><dd id="k-gear">—</dd>
+            <dt>Throttle</dt><dd id="k-thr">—</dd>
+            <dt>Brake</dt><dd id="k-brk">—</dd>
+          </dl>
+        </section>
+        <section class="panel">
+          <h2>Link</h2>
+          <dl class="kv">
+            <dt>Port</dt><dd id="k-port">—</dd>
+            <dt>Sketch</dt><dd id="k-sketch">—</dd>
+            <dt>Frames</dt><dd id="k-frames">0</dd>
+            <dt>Packets</dt><dd id="k-packets">0</dd>
+            <dt>Free RAM</dt><dd id="k-ram">—</dd>
+            <dt>Tacho</dt><dd id="k-tacho">—</dd>
+            <dt>Speedo</dt><dd id="k-speedo">—</dd>
+          </dl>
+        </section>
+      </div>
+    </div>
+
+    <div class="two">
+      <section class="panel" id="g-rpm">
+        <h2>Rev counter <i>servo on pin <b class="pn-tacho">9</b></i></h2>
+        <div id="dialwrap-rpm"></div>
+        <div class="gaugefoot">
+          <b id="gf-rpm">—</b><span>rpm at the needle</span>
+          <span class="us" id="gfus-rpm">— µs</span>
+        </div>
+        <div class="btns" style="margin-top:12px">
+          <button class="sm" data-cmd="RPM SWEEP">Sweep</button>
+          <button class="sm" data-cmd="RPM ZERO">Zero</button>
+          <button class="sm" data-cmd="RPM FULL">Full</button>
+          <button class="sm" data-auto="rpm">Auto</button>
+        </div>
+        <input type="range" id="sl-rpm" min="0" max="1000" step="1" value="0"
+               aria-label="Park the rev counter needle">
+        <div class="slrow"><span id="slz-rpm">ZERO · 2300 µs</span><span id="slf-rpm">FULL · 650 µs</span></div>
+        <div class="sub">
+          Dragging parks the needle (<code>RPM &lt;µs&gt;</code>) until you press <b>Auto</b>.
+          The slider stops at 650 µs because below that the needle hits its mechanical stop and
+          the servo stalls and buzzes.
+        </div>
+      </section>
+
+      <section class="panel" id="g-speed">
+        <h2>Speedometer <i>servo on pin <b class="pn-speedo">10</b></i></h2>
+        <div id="dialwrap-speed"></div>
+        <div class="gaugefoot">
+          <b id="gf-speed">—</b><span id="gfu-speed">mph at the needle</span>
+          <span class="us" id="gfus-speed">— µs</span>
+        </div>
+        <div class="btns" style="margin-top:12px">
+          <button class="sm" data-cmd="SPEED SWEEP">Sweep</button>
+          <button class="sm" data-cmd="SPEED ZERO">Zero</button>
+          <button class="sm" data-cmd="SPEED FULL">Full</button>
+          <button class="sm" data-auto="speed">Auto</button>
+        </div>
+        <input type="range" id="sl-speed" min="0" max="1000" step="1" value="0"
+               aria-label="Park the speedometer needle">
+        <div class="slrow"><span id="slz-speed">ZERO · 2213 µs</span><span id="slf-speed">FULL · 313 µs</span></div>
+        <div class="sub">
+          Full scale is <b id="speedo-full">350</b> in whatever unit the PC is sending. The <b id="trim-speed">−87
+          µs</b> trim is already in these numbers; it lives in RAM only and is lost if the board is
+          reconnected. <b>Calibration</b> is the tab that changes it.
+        </div>
+      </section>
+    </div>
+
+    <div class="cols">
+      <section class="panel" id="wheelpanel">
+        <h2>Steering wheel <i id="wheel-id">—</i></h2>
+        <div class="wheelwrap">
+          <div class="wheelart">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="42" fill="none" stroke="var(--line)" stroke-width="7"/>
+              <g id="wheel-rot" style="transform-origin:50px 50px">
+                <circle cx="50" cy="50" r="42" fill="none" stroke="var(--accent)"
+                        stroke-width="7" stroke-dasharray="30 34" stroke-linecap="round"/>
+                <path d="M50 50 L50 12" stroke="var(--accent)" stroke-width="5"
+                      stroke-linecap="round"/>
+                <path d="M50 50 L18 68 M50 50 L82 68" stroke="var(--line)"
+                      stroke-width="5" stroke-linecap="round"/>
+              </g>
+              <circle cx="50" cy="50" r="7" fill="var(--sunken)" stroke="var(--line)"/>
+            </svg>
+          </div>
+          <div>
+            <div class="kv" style="grid-template-columns:auto 1fr">
+              <dt>Steering</dt><dd id="w-steer">—</dd>
+              <dt>Raw count</dt><dd id="w-steerraw">—</dd>
+              <dt>Buttons</dt><dd id="w-btncount">—</dd>
+            </div>
+            <div class="steerbar"><b></b><i id="w-steerbar"></i></div>
+            <div class="sub" id="w-steerhint">
+              Left lock to right lock. EMC Lite reports this as a signed 16-bit axis.
+            </div>
+            <div id="w-pedals" style="margin-top:14px"></div>
+            <div class="axhead" id="w-axhead" hidden>Every axis · raw off the wire</div>
+            <div class="axes" id="w-axes"></div>
+            <div class="btngrid" id="w-buttons"></div>
+            <div class="wheeloff" id="w-off" hidden></div>
+          </div>
+        </div>
+        <div class="sub" style="margin-top:14px">
+          Read only, and always will be: the wheel is running EMC Lite, which is doing the
+          force feedback. Nothing on this page writes to it. It is opened shared, so a game
+          keeps working while this watches.
+        </div>
+      </section>
+    </div>
+
+    <div class="cols">
+      <section class="panel">
+        <h2>Where the numbers come from</h2>
+        <div class="srcs" id="srcs"></div>
+        <div class="hint" id="src-hint">—</div>
+
+        <h2 style="margin:20px 0 12px">Board</h2>
+        <div class="btns">
+          <button class="sm" data-cmd="PING">Ping</button>
+          <button class="sm" data-cmd="GET">Get state</button>
+          <button class="sm" data-cmd="TEST">Self test</button>
+          <button class="sm" data-cmd="LCD">LCD contrast</button>
+          <button class="sm" data-cmd="DEMO ON">Board demo on</button>
+          <button class="sm" data-cmd="DEMO OFF">Board demo off</button>
+        </div>
+        <form class="cmdrow" id="rawform">
+          <input id="rawcmd" aria-label="Raw serial command"
+                 placeholder="raw serial line, e.g.  SPEED TRIM -87" autocomplete="off" spellcheck="false">
+          <button class="sm primary" type="submit">Send</button>
+        </form>
+        <div class="sub">
+          Anything typed here goes to the board verbatim. <b>Self test</b> sweeps both servos one
+          after the other and blocks for a couple of seconds — the needles will drop out mid-race.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Serial <i id="logcount"></i></h2>
+        <!-- tabindex so it can be scrolled without a mouse; deliberately no
+             aria-live, which at rx rates would never stop talking. -->
+        <div id="log" role="log" tabindex="0" aria-label="Serial traffic"></div>
+        <div class="logbar">
+          <button class="sm" id="logpause">Pause</button>
+          <button class="sm" id="logclear">Clear</button>
+          <span class="sub" style="margin:0">
+            <span style="color:var(--ink)">rx</span> ·
+            <span style="color:var(--accent)">tx</span> ·
+            <span style="color:var(--muted)">info</span> ·
+            <span style="color:var(--bad)">error</span>
+          </span>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <!-- ==================== CALIBRATION ==================== -->
+  <section id="view-cal" role="tabpanel" tabindex="0" aria-labelledby="tab-cal" hidden>
+    <p class="lede">
+      Getting the needles to agree with the numbers, and the wheel to agree with straight
+      ahead. Everything on this tab lands the moment you touch it — there is no Apply button
+      and nothing is queued.
+    </p>
+
+    <div class="note">
+      <b>Only two of these four ever reach the board</b>
+      <p>
+        <em>TRIM</em> and <em>SPAN</em> are the firmware's own commands: the servo moves as you
+        change them, and both live in the board's RAM, so a reset, a reflash or a reconnect
+        throws them away. <em>ZERO</em> and <em>FULL</em> move this page's model of the needle
+        and the dial drawn under it. Nothing here is permanent until the numbers are in the
+        sketch and the board has been flashed again — which is what the block at the bottom
+        of this tab is for.
+      </p>
+    </div>
+
+    <div class="two">
+      <section class="panel" id="cal-rpm"></section>
+      <section class="panel" id="cal-speed"></section>
+    </div>
+
+    <div class="cols">
+      <section class="panel" id="cal-steer">
+        <h2>Steering <i id="cs-id">—</i></h2>
+        <div class="bigread">
+          <div><b id="cs-raw">—</b><span>raw count</span></div>
+          <div class="r"><b id="cs-norm">—</b><span>normalised</span></div>
+        </div>
+        <div class="steerbar"><b></b><i id="cs-bar"></i></div>
+        <div class="sub" id="cs-hint">
+          Hold the wheel where you want the mark, then press. Each button is a snapshot of
+          the raw count at that instant — nothing is averaged and nothing is waited for.
+        </div>
+        <div class="btns" style="margin-top:14px">
+          <button class="sm" data-steer="center">Centre it</button>
+          <button class="sm" data-steer="left">Full left</button>
+          <button class="sm" data-steer="right">Full right</button>
+          <button class="sm" id="cs-invert" data-steer="invert">Invert</button>
+          <button class="sm hot" data-steer="reset">Forget it all</button>
+        </div>
+        <dl class="kv" style="margin-top:15px">
+          <dt>Centre</dt><dd id="cs-c" class="dim">not captured</dd>
+          <dt>Full left</dt><dd id="cs-l" class="dim">not captured</dd>
+          <dt>Full right</dt><dd id="cs-r" class="dim">not captured</dd>
+          <dt>Inverted</dt><dd id="cs-inv" class="dim">no</dd>
+        </dl>
+        <div class="sub">
+          Until all three are captured the page falls back to the logical range in the wheel's
+          own HID descriptor, which claims the whole signed 16-bit axis whether or not the rim
+          can actually reach the ends of it. <b>Invert</b> only flips which way the numbers
+          count — it writes nothing to the wheel, which is running EMC Lite and is read-only
+          from here.
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Make it survive a reset <i>the #define lines for racedash_uno.ino</i></h2>
+        <div class="sub" style="margin-top:0">
+          Paste these over the block near the top of <code>racedash_uno.ino</code> and flash the
+          board. The comment on each line says whether it differs from what is compiled in right
+          now, so a line with nothing to say is a line you can leave alone.
+        </div>
+        <div class="btns" style="margin-top:13px">
+          <button class="sm primary" id="cal-sketch-btn">Show me the lines for the sketch</button>
+          <button class="sm" id="cal-sketch-copy" hidden>Copy</button>
+        </div>
+        <pre class="sketchout" id="cal-sketch-out" hidden></pre>
+      </section>
+    </div>
+  </section>
+
+  <!-- ==================== WIRING ==================== -->
+  <section id="view-wiring" role="tabpanel" tabindex="0" aria-labelledby="tab-wiring" hidden>
+    <p class="lede">
+      Every pin on the Uno, and why the empty ones are empty. The board runs one 16×2 character
+      LCD wired straight to the digital pins, one 128×32 OLED on the fixed I2C pair, and two
+      servos driven in raw microseconds.
+    </p>
+
+    <div class="note">
+      <b>The trap that catches everyone</b>
+      <p>
+        The LCD has pins printed <em>D4 D5 D6 D7</em> on it. Those do <em>not</em> go to the
+        Arduino pins of the same number — they go to <em>5, 4, 3 and 2</em>, in that order, which
+        is backwards from what you would guess. Go by the <em>LCD's own pin numbers</em>: count
+        from pin 1 at the end marked VSS/GND on the silkscreen.
+      </p>
+    </div>
+
+    <h3 class="sec">Every Arduino Uno pin</h3>
+    <div class="legend">
+      <span><i style="color:var(--accent)">■</i> LCD</span>
+      <span><i style="color:var(--info)">■</i> OLED</span>
+      <span><i style="color:var(--warn)">■</i> servo</span>
+      <span><i style="color:var(--bad)">■</i> deliberately left clear</span>
+      <span><i style="color:var(--muted)">■</i> free</span>
+    </div>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>Uno pin</th><th>Goes to</th><th>Why</th></tr></thead>
+        <tbody id="pinbody"></tbody>
+      </table>
+    </div>
+
+    <h3 class="sec">The LCD's own 16 pins</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>LCD pin</th><th>Name</th><th>Goes to</th><th>Why</th></tr></thead>
+        <tbody id="lcdbody"></tbody>
+      </table>
+    </div>
+
+    <div class="danger">
+      <b>Servo power does not come from the board</b>
+      <p>
+        Never run a servo from the Uno's 5V pin. An MG90S pulls around <em>700 mA</em> stalled and
+        a few hundred just snapping the needle over; a Uno on USB has about 500 mA for the whole
+        board. Give the servos their own 5V 2A supply with a 1000 µF capacitor across it, and tie
+        that supply's ground to the board's ground. <em>The shared ground wire is not optional.</em>
+      </p>
+    </div>
+
+    <div class="note">
+      <b>Why the two needles take turns</b>
+      <p>
+        The firmware ticks every 20 ms but moves only <em>one</em> gauge per tick, so each needle
+        still refreshes at 25 Hz while the two servos never draw their step current in the same
+        instant. That halves the worst-case sag on the 5V rail, which is what causes brown-out
+        resets. The self-test sweeps them one after the other for the same reason.
+      </p>
+    </div>
+
+    <div class="note">
+      <b>Pins 9 and 10 can never be PWM again</b>
+      <p>
+        On an AVR Uno the Servo library takes over Timer1, which kills <code>analogWrite()</code>
+        on pins 9 and 10. That costs nothing here because those <em>are</em> the servo pins, but
+        with the LCD holding 3, 5 and 11, pin <em>6</em> is the only PWM output left.
+      </p>
+    </div>
+
+    <h3 class="sec">The OLED</h3>
+    <div class="tablewrap">
+      <table>
+        <thead><tr><th>OLED pin</th><th>Goes to</th><th>Why</th></tr></thead>
+        <tbody>
+          <tr><td class="pin">VCC</td><td class="pin">5V</td><td class="why">5V, not 3V3 — the Uno is a 5V part so its I2C lines idle at 5V anyway.</td></tr>
+          <tr><td class="pin">GND</td><td class="pin">GND</td><td class="why"></td></tr>
+          <tr><td class="pin">SDA</td><td class="pin pn-sda">A4</td><td class="why">The Uno's I2C is fixed here and cannot be moved. That is why the LCD is wired in parallel instead.</td></tr>
+          <tr><td class="pin">SCL</td><td class="pin pn-scl">A5</td><td class="why">Same — fixed.</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+</div>
+
+<script>
+"use strict";
+const $ = id => document.getElementById(id);
+// Axis names and labels come from our own constants, not from the wire,
+// but they are still interpolated into HTML - so they get escaped.
+const esc = v => String(v).replace(/[&<>"']/g, c => (
+  {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* =====================================================================
+   Firmware constants — transcribed from racedash_uno.ino
+   ===================================================================== */
+const LCD_COLS = 16, LCD_ROWS = 2;
+const SHIFT_AT = 0.92;
+const STALE_MS = 1500;
+const LCD_MS   = 120;   // LCD frame rebuild cadence
+const DRAW_MS  = 50;    // OLED redraw cadence
+const SOLID    = 255;   // HD44780 ROM solid block
+
+/* speed value at which the speedo needle hits the end. Not const: the pins
+   event carries the backend's own full_value and that is the authority. */
+let SPEEDO_FULL = 350;
+
+const DIALS = {
+  rpm:   {full:8000, step:1000, divide:1000, title:"RPM ×1000", redline:0.88,
+          zero:2300, fullUs:650, trim:0,   labSize:7,   unit:"rpm"},
+  speed: {full:350,  step:50,   divide:1,    title:"MPH",            redline:0,
+          zero:2300, fullUs:400, trim:-87, labSize:5.5, unit:"mph"}
+};
+const DIAL_MIN_DEG = 10, DIAL_MAX_DEG = 170;   // make_dial.py defaults
+
+/* Pin map. A "pins" event may patch any of these. */
+const PINS = {rs:12, en:11, d4:5, d5:4, d6:3, d7:2, tacho:9, speedo:10, sda:"A4", scl:"A5"};
+
+/* =====================================================================
+   State
+   ===================================================================== */
+let st = {
+  connected:false, port:null, sketch:null, source:"off",
+  speed:0, rpm:0, max_rpm:8000, gear:-1, throttle:0, brake:0,
+  race_on:false, mph:true, tacho_us:null, speedo_us:null, free_ram:null,
+  frames:0, packets:0, stale:true
+};
+let streamUp = false;          // is the SSE alive
+let lastStateAt = 0;           // performance.now() of the last state event
+let logPaused = false, logLines = 0;
+
+/* =====================================================================
+   Transport
+   ===================================================================== */
+/* A failure has to be visible somewhere other than the log: the log can be
+   paused, and even running it is a scroller at the bottom of a long page. This
+   puts the last one in the header for a few seconds, where the connection
+   state already lives. */
+const NOTE_MS = 6000;
+let noteText = "", noteUntil = 0, noteTimer = null;
+function transportNote(msg){
+  /* A slider dragged with no board attached posts 20 refusals a second, all
+     saying the same thing: hold the message, extend its life, and do not
+     repaint for each one. */
+  const fresh = msg !== noteText || performance.now() >= noteUntil;
+  noteText = msg;
+  noteUntil = performance.now() + NOTE_MS;
+  if(noteTimer) clearTimeout(noteTimer);
+  // when the backend is dead there is no state event to carry it in or out
+  noteTimer = setTimeout(() => { noteTimer = null; noteText = ""; paint(); }, NOTE_MS);
+  if(fresh) paint();
+}
+/* What the backend actually said, not just the status code. dashboard.py
+   answers with {"ok":false,"error":"command longer than 55 characters"},
+   "unknown gauge", "no board connected" — all of it worth printing. */
+function httpWhy(status, j){
+  return status + (j && j.error ? " — " + j.error : "");
+}
+async function post(path, body){
+  try{
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
+                                body:JSON.stringify(body)});
+    if(!r.ok){
+      const j = await r.json().catch(() => null);
+      const why = "dashboard: " + path + " returned " + httpWhy(r.status, j);
+      addLog(why, "local");
+      transportNote(j && j.error ? j.error : path + " returned " + r.status);
+      return false;
+    }
+    return true;
+  }catch(e){
+    addLog("dashboard: could not reach " + path, "local");
+    transportNote("could not reach " + path);
+    return false;
+  }
+}
+/* Same again, but handing back what the endpoint said. The calibration
+   endpoints answer with the values they settled on, which is how the page
+   learns that the board clamped or refused something. */
+async function postJson(path, body){
+  try{
+    const r = await fetch(path, {method:"POST", headers:{"Content-Type":"application/json"},
+                                body:JSON.stringify(body)});
+    const j = await r.json().catch(() => null);
+    if(!r.ok){
+      addLog("dashboard: " + path + " returned " + httpWhy(r.status, j), "local");
+      /* A refusal that is not even JSON still has to say something the panel
+         can print. 404 is the one worth naming: it means the dashboard.py on
+         the other end is older than this page. */
+      return j || {ok:false, error:"the dashboard answered " + r.status +
+        (r.status === 404 ? " — this build of dashboard.py has no " + path : "")};
+    }
+    return j;
+  }catch(e){
+    addLog("dashboard: could not reach " + path, "local");
+    transportNote("could not reach " + path);
+    return null;
+  }
+}
+const sendCmd   = cmd => post("/cmd", {cmd});
+const setSource = s   => post("/source", {source:s});
+const parkServo = (gauge, us) => post("/servo", {gauge, us});
+const autoServo = gauge => post("/servo/auto", {gauge});
+
+/* ---- SSE with our own reconnect ---- */
+let es = null, retries = 0, retryTimer = null;
+function connect(){
+  if(retryTimer){ clearTimeout(retryTimer); retryTimer = null; }
+  try{ if(es) es.close(); }catch(e){}
+  try{ es = new EventSource("/events"); }
+  catch(e){ scheduleRetry(); return; }
+
+  es.onopen = () => {
+    if(!streamUp) addLog("dashboard: stream open", "info");
+    /* Deliberately NOT resetting `retries` here: onopen fires when the response
+       headers arrive, not when the stream is proven to carry anything. An
+       open-then-die cycle would otherwise reset the backoff every round and pin
+       it at the 600 ms floor forever. The first state event is the proof. */
+    streamUp = true; paint();
+  };
+  es.onmessage = ev => {
+    let m; try{ m = JSON.parse(ev.data); }catch(e){ return; }
+    if(m.type === "state"){
+      retries = 0;                       // the stream is genuinely delivering
+      Object.assign(st, m);
+      lastStateAt = performance.now();
+      paint();
+    } else if(m.type === "log"){
+      addLog(m.line, m.kind || "rx");
+    } else if(m.type === "pins"){
+      applyPins(m);
+    }
+  };
+  es.onerror = () => {
+    if(streamUp) addLog("dashboard: stream dropped, reconnecting…", "local");
+    streamUp = false; paint();
+    try{ es.close(); }catch(e){}
+    scheduleRetry();
+  };
+}
+function scheduleRetry(){
+  if(retryTimer) return;
+  const wait = Math.min(5000, 600 * Math.pow(1.7, retries++));
+  retryTimer = setTimeout(() => { retryTimer = null; connect(); }, wait);
+}
+
+/* ---- watchdog ----
+   es.onerror is not enough. A TCP connection can wedge with no error ever
+   firing — laptop sleep/resume, the phone's Wi-Fi dropping while it watches
+   over --lan, a stuck handler thread — and then streamUp stays true, connect()
+   is never re-run, and the page sits on "no telemetry" until someone reloads.
+   The backend guarantees a state event STATE_HZ times a second plus a `: ping`
+   every 15 s, so silence this long is proof the link is gone, not slow. */
+const STREAM_DEAD_MS = 4000;
+function streamWatchdog(){
+  if(!streamUp || !lastStateAt) return;
+  if(performance.now() - lastStateAt <= STREAM_DEAD_MS) return;
+  streamUp = false;
+  addLog("dashboard: stream went quiet, reconnecting…", "local");
+  try{ if(es) es.close(); }catch(e){}
+  paint();
+  scheduleRetry();
+}
+/* On its own interval rather than inside the rAF loop: rAF stops when the tab
+   is backgrounded or the window is not compositing, which is exactly when a
+   connection is most likely to have been dropped underneath us. Timers are
+   throttled to about 1 s in a background tab, which is well inside a 4 s
+   threshold. */
+setInterval(streamWatchdog, 1000);
+/* Coming back to a slept tab: rAF has been parked, so the watchdog above has
+   not been running either. Check the moment the page is looked at again. */
+document.addEventListener("visibilitychange", () => {
+  if(document.visibilityState !== "visible") return;
+  const now = performance.now();
+  if(!streamUp || (lastStateAt && now - lastStateAt > STREAM_DEAD_MS)){
+    streamUp = false;
+    try{ if(es) es.close(); }catch(e){}
+    if(retryTimer){ clearTimeout(retryTimer); retryTimer = null; }
+    connect();
+  }
+});
+
+/* =====================================================================
+   Log
+   ===================================================================== */
+let lastLogText = null, lastLogRepeat = 1;
+function addLog(line, kind){
+  /* Pause holds the serial traffic still so it can be read. It must not also
+     switch off every report of a dead backend or a refused command — those are
+     the lines you most need while something is going wrong. */
+  if(logPaused && kind !== "local" && kind !== "error") return;
+  const el = $("log");
+  const near = el.scrollTop + el.clientHeight >= el.scrollHeight - 40;
+  const text = (kind === "tx" ? "↑ " : kind === "rx" ? "↓ " : "  ") + line;
+  const tail = el.lastChild;
+  /* Consecutive identical lines are counted, not repeated. A slider dragged
+     with no board attached makes /servo answer "no board connected" twenty
+     times a second, which would push everything else out of the 400-row window
+     in twenty seconds — and now that these bypass the pause, out of a log
+     somebody is deliberately holding still to read. */
+  if(tail && text === lastLogText){
+    lastLogRepeat++;
+    tail.textContent = text + "  ×" + lastLogRepeat;
+  }else{
+    lastLogText = text; lastLogRepeat = 1;
+    const s = document.createElement("span");
+    s.className = "k-" + (kind || "rx");
+    s.textContent = text;
+    el.appendChild(s);
+    while(el.childNodes.length > 400){ el.removeChild(el.firstChild); }
+  }
+  logLines++;
+  if(near) el.scrollTop = el.scrollHeight;
+  $("logcount").textContent = el.childNodes.length + " lines" +
+                              (logLines > el.childNodes.length ? " of " + logLines : "");
+}
+$("logpause").onclick = e => {
+  logPaused = !logPaused;
+  e.target.textContent = logPaused ? "Resume" : "Pause";
+  e.target.classList.toggle("hot", logPaused);
+};
+$("logclear").onclick = () => {
+  $("log").textContent = ""; logLines = 0; lastLogText = null; lastLogRepeat = 1;
+  $("logcount").textContent = "";
+};
+
+/* =====================================================================
+   Derived helpers — exact ports of the firmware
+   ===================================================================== */
+const idiv  = (a,b) => Math.trunc(a/b);
+const clamp = (v,a,b) => v < a ? a : v > b ? b : v;
+
+function rpmFraction(){
+  if(!(st.max_rpm > 0)) return 0;
+  return clamp(st.rpm / st.max_rpm, 0, 1);
+}
+function speedFraction(){ return clamp(st.speed / SPEEDO_FULL, 0, 1); }
+function isShift(){ return rpmFraction() >= SHIFT_AT && !!st.race_on; }
+
+/* Stale is whatever the backend says, but if the stream itself has gone
+   quiet we must not keep drawing a frozen frame as if it were live. */
+function stale(){
+  if(!streamUp) return true;
+  if(lastStateAt && performance.now() - lastStateAt > STALE_MS) return true;
+  return !!st.stale;
+}
+function gearText(){
+  if(!st.race_on) return "–";
+  if(st.gear < 0) return "N";
+  if(st.gear === 0) return "R";
+  return String(st.gear);
+}
+
+/* =====================================================================
+   1. THE 16x2 LCD REPLICA
+   ===================================================================== */
+const lcdCells = [];
+(function buildLcd(){
+  const el = $("lcd");
+  for(let r = 0; r < LCD_ROWS; r++){
+    for(let c = 0; c < LCD_COLS; c++){
+      const d = document.createElement("div");
+      d.className = "c";
+      el.appendChild(d);
+      lcdCells.push({el:d, code:-1});
+    }
+  }
+})();
+
+function barInto(f, row, col, cells, frac){
+  const sub  = Math.trunc(frac * (cells * 5) + 0.5);   // round-half-up then truncate
+  const full = Math.trunc(sub / 5);
+  const rem  = sub % 5;
+  for(let i = 0; i < cells; i++){
+    let ch = 32;
+    if(i < full) ch = SOLID;
+    else if(i === full && rem) ch = rem;              // CGRAM codes 1..4
+    f[row][col + i] = ch;
+  }
+}
+
+function lcdBuildFrame(blink){
+  const f = [];
+  for(let r = 0; r < LCD_ROWS; r++) f.push(new Array(LCD_COLS).fill(32));
+  const put = (r, c, s) => {
+    if(r >= LCD_ROWS) return;
+    for(let i = 0; i < s.length; i++){
+      const x = c + i;
+      if(x >= 0 && x < LCD_COLS) f[r][x] = s.charCodeAt(i);
+    }
+  };
+  const center = (r, s) => put(r, Math.trunc((LCD_COLS - s.length) / 2), s);
+
+  if(stale()){
+    center(0, "== RACE DASH ==");     // 15 chars -> col 0, col 15 stays blank
+    center(1, "WAITING FOR DATA");    // 16 chars -> col 0
+    return f;
+  }
+
+  const frac  = rpmFraction();
+  const shift = frac >= SHIFT_AT && st.race_on;
+
+  // row 0 cols 0..2 — gear, always exactly three cells, written first
+  let g;
+  if(!st.race_on)      g = "-  ";
+  else if(st.gear < 0) g = "N  ";
+  else if(st.gear === 0) g = "R  ";
+  else                 g = ("G" + st.gear).padEnd(3, " ").slice(0, 3);   // "G%-2d"
+  f[0][0] = g.charCodeAt(0); f[0][1] = g.charCodeAt(1); f[0][2] = g.charCodeAt(2);
+
+  // row 0 cols 3..15 — rev bar, or the SHIFT flash
+  if(shift && blink) put(0, 3, "  SHIFT UP!  ");
+  else               barInto(f, 0, 3, LCD_COLS - 3, frac);
+
+  // row 1 — "%3d%s  %4dRPM", always 15 chars, col 15 stays blank
+  const kmh = clamp(Math.round(st.speed), 0, 999);
+  const rpm = clamp(Math.round(st.rpm), 0, 9999);
+  put(1, 0, String(kmh).padStart(3, " ") + (st.mph ? "MPH" : "KMH")
+            + "  " + String(rpm).padStart(4, " ") + "RPM");
+  return f;
+}
+
+function paintLcd(f){
+  for(let r = 0; r < LCD_ROWS; r++){
+    for(let c = 0; c < LCD_COLS; c++){
+      const cell = lcdCells[r * LCD_COLS + c], code = f[r][c];
+      if(cell.code === code) continue;
+      cell.code = code;
+      if(code === SOLID || (code >= 1 && code <= 4)){
+        cell.el.textContent = "";
+        cell.el.classList.add("blk");
+        cell.el.style.setProperty("--w", code === SOLID ? 5 : code);
+      }else{
+        cell.el.classList.remove("blk");
+        cell.el.textContent = String.fromCharCode(code);
+      }
+    }
+  }
+}
+
+/* =====================================================================
+   2. THE 128x32 OLED REPLICA
+   ===================================================================== */
+const W = 128, H = 32, WHITE = 1, BLACK = 0, INVERSE = 2;
+const SEG_DIGIT = [0x3F,0x06,0x5B,0x4F,0x66,0x6D,0x7D,0x07,0x7F,0x6F];
+const SEG_DASH = 0x40, SEG_P = 0x73, SEG_N = 0x37;
+
+/* Adafruit GFX classic 5x7 glyphs — 5 column bytes, LSB = topmost row.
+   Only the characters these two screens can ever print. */
+const F5 = {
+  " ":[0,0,0,0,0],
+  "0":[0x3E,0x51,0x49,0x45,0x3E], "1":[0x00,0x42,0x7F,0x40,0x00],
+  "2":[0x42,0x61,0x51,0x49,0x46], "3":[0x21,0x41,0x45,0x4B,0x31],
+  "4":[0x18,0x14,0x12,0x7F,0x10], "5":[0x27,0x45,0x45,0x45,0x39],
+  "6":[0x3C,0x4A,0x49,0x49,0x30], "7":[0x01,0x71,0x09,0x05,0x03],
+  "8":[0x36,0x49,0x49,0x49,0x36], "9":[0x06,0x49,0x49,0x29,0x1E],
+  "A":[0x7E,0x11,0x11,0x11,0x7E], "D":[0x7F,0x41,0x41,0x22,0x1C],
+  "F":[0x7F,0x09,0x09,0x01,0x01], "H":[0x7F,0x08,0x08,0x08,0x7F],
+  "I":[0x00,0x41,0x7F,0x41,0x00], "M":[0x7F,0x02,0x0C,0x02,0x7F],
+  "N":[0x7F,0x04,0x08,0x10,0x7F], "O":[0x3E,0x41,0x41,0x41,0x3E],
+  "P":[0x7F,0x09,0x09,0x09,0x06], "R":[0x7F,0x09,0x19,0x29,0x46],
+  "S":[0x46,0x49,0x49,0x49,0x31], "T":[0x01,0x01,0x7F,0x01,0x01],
+  "a":[0x20,0x54,0x54,0x54,0x78], "d":[0x38,0x44,0x44,0x48,0x7F],
+  "e":[0x38,0x54,0x54,0x54,0x18], "i":[0x00,0x44,0x7D,0x40,0x00],
+  "l":[0x00,0x41,0x7F,0x40,0x00], "r":[0x7C,0x08,0x04,0x04,0x08],
+  "s":[0x48,0x54,0x54,0x54,0x20]
+};
+
+const buf = new Uint8Array(W * H);
+function px(x, y, c){
+  if(x < 0 || x >= W || y < 0 || y >= H) return;
+  const i = y * W + x;
+  if(c === WHITE) buf[i] = 1;
+  else if(c === BLACK) buf[i] = 0;
+  else buf[i] ^= 1;                                    // SSD1306_INVERSE = XOR
+}
+function fillRect(x, y, w, h, c){
+  for(let yy = y; yy < y + h; yy++) for(let xx = x; xx < x + w; xx++) px(xx, yy, c);
+}
+function drawRect(x, y, w, h, c){
+  for(let xx = x; xx < x + w; xx++){ px(xx, y, c); px(xx, y + h - 1, c); }
+  for(let yy = y; yy < y + h; yy++){ px(x, yy, c); px(x + w - 1, yy, c); }
+}
+function vLine(x, y, h, c){ for(let yy = y; yy < y + h; yy++) px(x, yy, c); }
+/* Adafruit_GFX::writeLine, transcribed step for step. It matters which
+   Bresenham this is: the symmetric err = dx + dy variant that was here picks a
+   different row on a diagonal, and the R glyph's leg — the only line either
+   file draws — came out with its doubled row at y = 25/26 where the board puts
+   it at y = 24/25. Steep-axis swap, err = dx/2, step along the major axis. */
+function line(x0, y0, x1, y1, c){                       // both ends inclusive
+  const steep = Math.abs(y1 - y0) > Math.abs(x1 - x0);
+  if(steep){ let t = x0; x0 = y0; y0 = t; t = x1; x1 = y1; y1 = t; }
+  if(x0 > x1){ let t = x0; x0 = x1; x1 = t; t = y0; y0 = y1; y1 = t; }
+  const dx = x1 - x0, dy = Math.abs(y1 - y0);
+  const ystep = y0 < y1 ? 1 : -1;
+  let err = idiv(dx, 2);                                // int16_t dx / 2
+  for(; x0 <= x1; x0++){
+    if(steep) px(y0, x0, c); else px(x0, y0, c);
+    err -= dy;
+    if(err < 0){ y0 += ystep; err += dx; }
+  }
+}
+function drawText(x, y, str, size){
+  for(let k = 0; k < str.length; k++){
+    const cols = F5[str[k]] || F5[" "];
+    for(let cx = 0; cx < 5; cx++)
+      for(let cy = 0; cy < 7; cy++)
+        if((cols[cx] >> cy) & 1)
+          fillRect(x + k * 6 * size + cx * size, y + cy * size, size, size, WHITE);
+  }
+}
+function drawSeg(x, y, w, h, t, m){
+  const half = idiv(h - 3 * t, 2);
+  if(m & 0x01) fillRect(x + t,     y,              w - 2*t, t,    WHITE); // a
+  if(m & 0x02) fillRect(x + w - t, y + t,          t,       half, WHITE); // b
+  if(m & 0x04) fillRect(x + w - t, y + 2*t + half, t,       half, WHITE); // c
+  if(m & 0x08) fillRect(x + t,     y + h - t,      w - 2*t, t,    WHITE); // d
+  if(m & 0x10) fillRect(x,         y + 2*t + half, t,       half, WHITE); // e
+  if(m & 0x20) fillRect(x,         y + t,          t,       half, WHITE); // f
+  if(m & 0x40) fillRect(x + t,     y + t + half,   w - 2*t, t,    WHITE); // g
+}
+function drawGlyphR(x, y, w, h, t){
+  drawSeg(x, y, w, h, t, SEG_P);
+  for(let i = 0; i < t; i++)
+    line(x + idiv(w,2) + i, y + idiv(h,2), x + w - t + i, y + h - 1, WHITE);
+}
+function drawGearGlyph(x, y, w, h, t, raceOn, gear){
+  if(!raceOn){ drawSeg(x, y, w, h, t, SEG_DASH); return; }   // "-"
+  if(gear < 0){ drawSeg(x, y, w, h, t, SEG_N);   return; }   // "N"  (gear == -1)
+  if(gear === 0){ drawGlyphR(x, y, w, h, t);     return; }   // "R"
+  if(gear <= 9){ drawSeg(x, y, w, h, t, SEG_DIGIT[gear]); return; }
+  const hw = idiv(w - 2, 2);                                 // 10 for w = 22
+  drawSeg(x,           y, hw, h, t, SEG_DIGIT[idiv(gear,10) % 10]);
+  drawSeg(x + hw + 2,  y, hw, h, t, SEG_DIGIT[gear % 10]);
+}
+function drawRpmBar(x, y, w, h, frac, shift, blinkOn){
+  drawRect(x, y, w, h, WHITE);
+  const segW = 3, gap = 1;
+  const n   = idiv((w - 4) + gap, segW + gap);   // 31, not 32
+  const lit = Math.trunc(frac * n + 0.5);
+  const red = idiv(n * 88, 100);                 // 27
+  for(let i = 0; i < n; i++){
+    const sx = x + 2 + i * (segW + gap);
+    if(i < lit)        fillRect(sx, y + 2, segW, h - 4, WHITE);
+    else if(i >= red)  vLine(sx + idiv(segW,2), y + 2, h - 4, WHITE);
+  }
+  if(shift && blinkOn) fillRect(x, y, w, h, INVERSE);   // XOR the whole rect
+}
+function drawOled(blinkOn){
+  buf.fill(0);
+  const frac = rpmFraction(), shift = frac >= SHIFT_AT && st.race_on;
+  drawRpmBar(0, 0, 128, 8, frac, shift, blinkOn);
+  drawGearGlyph(2, 9, 22, 22, 4, !!st.race_on, st.gear);
+  vLine(29, 9, 22, WHITE);
+  drawText(34, 10, (shift && blinkOn) ? "SHIFT" : "RPM", 1);
+  const s = String(clamp(Math.round(st.rpm), 0, 99999));
+  drawText(126 - s.length * 12, 16, s, 2);
+}
+function drawOledWaiting(){
+  buf.fill(0);
+  drawText(2,  1, "NO DATA",     2);
+  drawText(2, 20, "serial idle", 1);
+}
+
+const oledCv  = $("oled");
+const oledCtx = oledCv.getContext("2d");
+/* The panel at its own 128x32, kept off-screen. The visible canvas carries a
+   backing store sized to the DEVICE pixel grid and this is blitted onto it with
+   smoothing off — so the scale can be exact without this loop growing with it. */
+const oledSrc = document.createElement("canvas");
+oledSrc.width = W; oledSrc.height = H;
+const oledSrcCtx = oledSrc.getContext("2d");
+const oledImg = oledSrcCtx.createImageData(W, H);
+
+/* One definition of the glass colours, not two. --oled-on/--oled-off are in
+   :root, the blit used to hold its own copy of both, and nothing linked them:
+   retheming the page moved the bezel and left the glass on the old colours. */
+function cssRgb(name, fallback){
+  const v = getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  let m = /^#([0-9a-f]{6})$/i.exec(v);
+  if(m){ const n = parseInt(m[1], 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+  m = /^#([0-9a-f]{3})$/i.exec(v);
+  if(m){ const h = m[1]; return [0,1,2].map(i => parseInt(h[i] + h[i], 16)); }
+  m = /^rgba?\(([^)]+)\)/i.exec(v);
+  if(m){
+    const p = m[1].split(/[\s,\/]+/).filter(s => s !== "").map(Number);
+    if(p.length >= 3 && p.slice(0,3).every(n => isFinite(n)))
+      return [p[0] | 0, p[1] | 0, p[2] | 0];
+  }
+  return fallback;
+}
+const OLED_ON  = cssRgb("--oled-on",  [230, 242, 255]);
+const OLED_OFF = cssRgb("--oled-off", [5, 8, 11]);
+
+function blitOled(){
+  const d = oledImg.data;
+  for(let i = 0; i < buf.length; i++){
+    const c = buf[i] ? OLED_ON : OLED_OFF;
+    d[i*4] = c[0]; d[i*4+1] = c[1]; d[i*4+2] = c[2]; d[i*4+3] = 255;
+  }
+  oledSrcCtx.putImageData(oledImg, 0, 0);
+  // writing canvas.width resets this, so it is set on every blit
+  oledCtx.imageSmoothingEnabled = false;
+  oledCtx.drawImage(oledSrc, 0, 0, oledCv.width, oledCv.height);
+}
+
+/* =====================================================================
+   3. THE TWO SVG DIALS
+   ===================================================================== */
+const CX = 50, CY = 52, HALF = Math.abs(DIAL_MAX_DEG - DIAL_MIN_DEG) / 2;
+const R_OUTER = 44, R_MINOR = 40, R_MAJOR = 36, R_LABEL = 30, R_RED = 42;
+
+function ptAt(a, r){                       // angle from straight up, positive clockwise
+  const t = a * Math.PI / 180;
+  return [CX + r * Math.sin(t), CY - r * Math.cos(t)];
+}
+function arcPath(a0, a1, r){
+  const [x0,y0] = ptAt(a0, r), [x1,y1] = ptAt(a1, r);
+  return "M " + x0.toFixed(2) + " " + y0.toFixed(2) + " A " + r + " " + r + " 0 " +
+         (Math.abs(a1 - a0) > 180 ? 1 : 0) + " 1 " + x1.toFixed(2) + " " + y1.toFixed(2);
+}
+/* pfx lets a second copy of the same dial exist elsewhere on the page — the
+   calibration tab draws one under its own "cal-" ids. */
+function buildDial(g, pfx){
+  const c = DIALS[g], p = pfx || "";
+  const A = v => -HALF + (v / c.full) * (2 * HALF);
+  const o = [];
+  const ln = (a, r0, r1, cls) => {
+    const [x0,y0] = ptAt(a, r0), [x1,y1] = ptAt(a, r1);
+    o.push('<line x1="' + x0.toFixed(2) + '" y1="' + y0.toFixed(2) + '" x2="' + x1.toFixed(2) +
+           '" y2="' + y1.toFixed(2) + '" class="' + cls + '"/>');
+  };
+
+  o.push('<circle cx="' + CX + '" cy="' + CY + '" r="' + R_OUTER + '" class="face"/>');
+  o.push('<path d="' + arcPath(-HALF, HALF, R_MINOR) + '" class="scale"/>');
+  if(c.redline > 0){
+    o.push('<path d="' + arcPath(A(c.redline * c.full), HALF, R_RED) + '" class="red"/>');
+    o.push('<path d="' + arcPath(A(SHIFT_AT * c.full), HALF, R_OUTER + 1.6) + '" class="shiftarc"/>');
+  }
+
+  const minor = c.step / 2;
+  for(let v = 0; v <= c.full + 1e-6; v += minor){
+    const a = A(v);
+    if(Math.abs(v % c.step) < 1e-6){
+      ln(a, R_MAJOR, R_MINOR, "tkmaj");
+      const [lx,ly] = ptAt(a, R_LABEL);
+      o.push('<text x="' + lx.toFixed(2) + '" y="' + ly.toFixed(2) + '" class="lab" font-size="' +
+             c.labSize + '">' + Math.round(v / c.divide) + "</text>");
+    }else{
+      ln(a, R_MAJOR + 2.5, R_MINOR, "tkmin");
+    }
+  }
+
+  /* Below the hub, not above it as on the printed sheet — on screen the needle
+     would sit straight through it for half the scale. */
+  o.push('<text x="' + CX + '" y="' + (CY + 21) + '" class="title" id="dtitle-' + p + g + '">' +
+         c.title + "</text>");
+  o.push('<g class="tgt" id="tgt-' + p + g + '"><path d="M ' + CX + " " + (CY - R_OUTER - 1.2) +
+         " l -1.7 -3.6 l 3.4 0 z" + '"/></g>');
+  o.push('<g class="ndl" id="ndl-' + p + g + '"><path d="M ' + CX + " " + (CY - R_MAJOR - 1) +
+         " L " + (CX - 2.4) + " " + (CY + 3.2) + " L " + (CX + 2.4) + " " + (CY + 3.2) +
+         " Z" + '"/></g>');
+  o.push('<circle cx="' + CX + '" cy="' + CY + '" r="3.2" class="hub"/>');
+
+  return '<svg class="dial" id="dial-' + p + g + '" viewBox="0 0 100 100" ' +
+         'role="img" aria-label="' + (g === "rpm" ? "Rev counter" : "Speedometer") + '">' +
+         o.join("") + "</svg>";
+}
+$("dialwrap-rpm").innerHTML   = buildDial("rpm");
+$("dialwrap-speed").innerHTML = buildDial("speed");
+
+/* microseconds -> position along the dial. Trim comes off first because the
+   firmware only adds it to the OUTPUT pulse; zeroUs/fullUs are untrimmed.
+   The reversal needs no flag: both numerator and denominator go negative. */
+function usToFrac(g, us){
+  const c = DIALS[g];
+  // Calibration can now drag both ends, and a scale with no length would put
+  // NaN into an SVG transform, which fails silently and freezes the needle.
+  if(c.fullUs === c.zero) return 0;
+  return clamp((us - c.trim - c.zero) / (c.fullUs - c.zero), 0, 1);
+}
+function fracToUs(g, f){
+  const c = DIALS[g];
+  return Math.round(c.zero + f * (c.fullUs - c.zero)) + c.trim;
+}
+function fracToAngle(f){ return -HALF + f * (2 * HALF); }
+
+/* How much of the commanded travel the servo actually manages.
+   The printed dials assume 160 degrees of sweep, but these servos only turn
+   about 140 - the shortfall you can see on the glass, where the rev needle
+   stops around 7 at the redline instead of 8. Drawing the needle at the
+   commanded position therefore puts the on-screen needle ahead of the real
+   one: measured at 4 on the glass against a little over 4.5 here, which is
+   this ratio almost exactly.
+
+   So the DIAL is drawn where the needle really points, and the number under it
+   is the true value. The two disagreeing is the hardware being honest, not a
+   bug - and the real fix is reprinting the dial for the servo's actual sweep:
+       python make_dial.py --min-deg 170 --max-deg 35
+   after which set the gain back to 1. */
+// Set back to 1 once dial_rpm_140.svg is printed and fitted: that dial is
+// drawn for the servo's real 140-degree sweep, so the needle reaches a true
+// 8 and no compensation is needed. Until then leave rpm at 0.875 so the
+// on-screen needle matches the old 160-degree dial still on the rig.
+const TRAVEL_GAIN = { rpm: 0.875, speed: 1.0 };
+function travelGain(g){ return TRAVEL_GAIN[g] === undefined ? 1 : TRAVEL_GAIN[g]; }
+
+function paintDial(g, us, targetFrac){
+  const svg = $("dial-" + g);
+  const dead = (us === null || us === undefined);
+  svg.classList.toggle("dead", dead);
+  const f = dead ? 0 : usToFrac(g, us);
+  const gain = travelGain(g);
+  $("ndl-" + g).setAttribute("transform",
+    "rotate(" + fracToAngle(f * gain).toFixed(2) + " " + CX + " " + CY + ")");
+  $("tgt-" + g).setAttribute("transform",
+    "rotate(" + fracToAngle(targetFrac * gain).toFixed(2) + " " + CX + " " + CY + ")");
+
+  $("gf-" + g).textContent   = dead ? "—" : String(Math.round(f * DIALS[g].full));
+  $("gfus-" + g).textContent = dead ? "no servo" : (us + " µs");
+}
+
+/* =====================================================================
+   4. PIN MAP
+   ===================================================================== */
+const PIN_ORDER = ["0","1","2","3","4","5","6","7","8","9","10","11","12","13",
+                   "A0","A1","A2","A3","A4","A5"];
+const PIN_LABEL = {"0":"0 (RX)", "1":"1 (TX)"};
+
+function buildPinTable(){
+  const use = {};
+  const set = (p, to, why, cls) => { if(p !== undefined && p !== null) use[String(p)] = {to,why,cls}; };
+
+  // Deliberately-clear first, so a remap can still claim them and show why.
+  set(0, "nothing — left clear on purpose",
+       "RX of the USB serial link the telemetry arrives on. Using it breaks the whole thing.", "keep");
+  set(1, "nothing — left clear on purpose",
+       "TX of the same link.", "keep");
+
+  set(PINS.d7, "LCD pin 14 · <span class=\"trap\">the LCD calls it D7</span>",
+       "PIN_D7. High nibble, 4-bit mode.", "lcd");
+  set(PINS.d6, "LCD pin 13 · <span class=\"trap\">the LCD calls it D6</span>", "PIN_D6.", "lcd");
+  set(PINS.d5, "LCD pin 12 · <span class=\"trap\">the LCD calls it D5</span>", "PIN_D5.", "lcd");
+  set(PINS.d4, "LCD pin 11 · <span class=\"trap\">the LCD calls it D4</span>", "PIN_D4.", "lcd");
+  set(PINS.tacho,  "Tacho servo signal (orange/yellow)",
+       "TACHO_PIN. 2300 µs at rest → 650 µs at redline — reversed on purpose.", "servo");
+  set(PINS.speedo, "Speedo servo signal (orange/yellow)",
+       "SPEEDO_PIN. 2300 µs → 400 µs, with a −87 µs trim.", "servo");
+  set(PINS.en, "LCD pin 6 · E", "PIN_EN, the enable strobe.", "lcd");
+  set(PINS.rs, "LCD pin 4 · RS", "PIN_RS, register select.", "lcd");
+  set(PINS.sda, "0.91” OLED SDA", "I2C is fixed here on an Uno and cannot be moved.", "oled");
+  set(PINS.scl, "0.91” OLED SCL", "Same — fixed.", "oled");
+
+  const free = {
+    "6":"free — and the only PWM output left, because Timer1 is gone to the servos",
+    "7":"free", "8":"free", "13":"free — the on-board LED",
+    "A0":"free", "A1":"free", "A2":"free", "A3":"free"
+  };
+
+  $("pinbody").innerHTML = PIN_ORDER.map(p => {
+    const u = use[p];
+    if(u) return '<tr data-use="' + u.cls + '"><td class="pin">' + (PIN_LABEL[p] || p) +
+                 "</td><td>" + u.to + '</td><td class="why">' + u.why + "</td></tr>";
+    return '<tr class="free"><td class="pin">' + (PIN_LABEL[p] || p) + "</td><td>" +
+           (free[p] || "free") + '</td><td class="why"></td></tr>';
+  }).join("");
+
+  document.querySelectorAll(".pn-tacho").forEach(e => e.textContent = PINS.tacho);
+  document.querySelectorAll(".pn-speedo").forEach(e => e.textContent = PINS.speedo);
+  document.querySelectorAll(".pn-sda").forEach(e => e.textContent = PINS.sda);
+  document.querySelectorAll(".pn-scl").forEach(e => e.textContent = PINS.scl);
+}
+
+const LCD16 = [
+  [1,  "VSS",      "GND", "Ground."],
+  [2,  "VDD",      "5V",  "The Uno is a 5V part, so no contrast compromise."],
+  [3,  "V0",       "middle leg of a 10k pot", "Contrast. Outer legs to 5V and GND. If the screen is blank, turn this first."],
+  [4,  "RS",       "rs",  "Register select — command or data."],
+  [5,  "RW",       "GND", "Tied low, which makes the LCD write-only and keeps its data pins high-impedance."],
+  [6,  "E",        "en",  "Enable strobe."],
+  [7,  "D0",       "nothing", "4-bit mode — the low nibble is unused."],
+  [8,  "D1",       "nothing", "4-bit mode."],
+  [9,  "D2",       "nothing", "4-bit mode."],
+  [10, "D3",       "nothing", "4-bit mode."],
+  [11, "D4",       "d4",  "TRAP: the LCD's D4, not the Arduino's."],
+  [12, "D5",       "d5",  "TRAP: the LCD's D5."],
+  [13, "D6",       "d6",  "TRAP: the LCD's D6."],
+  [14, "D7",       "d7",  "TRAP: the LCD's D7."],
+  [15, "A / LED+", "5V via 220 Ω", "Backlight."],
+  [16, "K / LED−", "GND", "Backlight."]
+];
+function buildLcdTable(){
+  $("lcdbody").innerHTML = LCD16.map(row => {
+    const [n, name, dest, why] = row;
+    const mapped = PINS[dest] !== undefined;
+    /* PINS values come off the wire. applyPins only lets scalars through, but
+       the escape belongs at the point of interpolation as well — this is the
+       one table that prints a pin number into HTML rather than textContent. */
+    const to = mapped ? ("Arduino " + esc(PINS[dest])) : esc(dest);
+    const trap = why.startsWith("TRAP:");
+    return '<tr' + (mapped ? ' data-use="lcd"' : "") + '><td class="pin">' + n +
+           '</td><td class="pin">' + name + '</td><td class="pin">' + to +
+           '</td><td class="why">' + (trap
+             ? '<span class="trap">' + why.slice(5).trim() + "</span>"
+             : why) + "</td></tr>";
+  }).join("");
+}
+
+/* Full scale can only arrive on the pins event — the state event carries the
+   needle's endpoints but not the reading the far end of the dial means. Both
+   the fraction and the dial's printed labels come off it, so changing it means
+   redrawing the two speed dials. */
+function setSpeedoFull(v){
+  if(!(typeof v === "number" && isFinite(v) && v > 0)) return false;
+  const n = Math.round(v);
+  if(n === SPEEDO_FULL && n === DIALS.speed.full) return false;
+  SPEEDO_FULL = n;
+  DIALS.speed.full = n;
+  $("dialwrap-speed").innerHTML = buildDial("speed");
+  const cal = $("dial-cal-speed");                 // the calibration tab's copy
+  if(cal) cal.outerHTML = buildDial("speed", "cal-");
+  const say = $("speedo-full");
+  if(say) say.textContent = String(n);
+  return true;
+}
+
+function applyPins(m){
+  /* The backend nests this and does not send a flat map: the LCD pins live
+     under m.lcd, the I2C pair under m.oled, each servo pin under
+     m.gauges.<g>.pin — and m.pins is an ARRAY of {pin,use,note} descriptors
+     meant for a table, not a name->pin lookup. The old tolerant merge passed
+     `typeof m.pins === "object"` (arrays are objects), merged the array
+     indices in as "0","1","2"…, matched nothing at all, and then logged
+     success anyway, leaving the Wiring tab — the page you follow while
+     soldering — permanently frozen on the compiled-in defaults. */
+  const changed = [];
+  /* Nothing but a number or a non-empty string may land in PINS. These values
+     are interpolated into the wiring tables, so a nested object or a string
+     carrying markup would otherwise go straight through into innerHTML. */
+  const scalar = v => (typeof v === "number" && isFinite(v)) ||
+                      (typeof v === "string" && v !== "" && v.length < 12);
+  /* Still tolerant about names and about where they sit — the nested object
+     first, then the top level for a flat sender — but never about the type. */
+  const take = (key, sources, ...names) => {
+    for(const obj of sources){
+      if(!obj || typeof obj !== "object") continue;
+      for(const n of names){
+        const v = obj[n];
+        if(v === undefined || v === null || !scalar(v)) continue;
+        const s = typeof v === "number" ? v : String(v);
+        if(PINS[key] !== s){ PINS[key] = s; changed.push(key + "→" + s); }
+        return;
+      }
+    }
+  };
+
+  const obj  = v => (v && typeof v === "object" && !Array.isArray(v)) ? v : null;
+  const lcd  = obj(m.lcd), oled = obj(m.oled), gauges = obj(m.gauges) || {};
+  const rpmG = obj(gauges.rpm), spdG = obj(gauges.speed);
+
+  take("rs", [lcd, m], "rs", "lcd_rs", "PIN_RS");
+  take("en", [lcd, m], "e", "en", "lcd_en", "PIN_EN");
+  take("d4", [lcd, m], "d4", "lcd_d4", "PIN_D4");
+  take("d5", [lcd, m], "d5", "lcd_d5", "PIN_D5");
+  take("d6", [lcd, m], "d6", "lcd_d6", "PIN_D6");
+  take("d7", [lcd, m], "d7", "lcd_d7", "PIN_D7");
+  take("tacho",  [rpmG, m], "pin", "tacho",  "tacho_pin",  "TACHO_PIN");
+  take("speedo", [spdG, m], "pin", "speedo", "speedo_pin", "SPEEDO_PIN");
+  take("sda", [oled, m], "sda", "SDA");
+  take("scl", [oled, m], "scl", "SCL");
+
+  if(changed.length){
+    buildPinTable();
+    buildLcdTable();
+    /* The gauge headings print the servo pin too, and on the calibration tab
+       they are built from PINS at construction time. */
+    document.querySelectorAll(".pn-tacho").forEach(e => e.textContent = PINS.tacho);
+    document.querySelectorAll(".pn-speedo").forEach(e => e.textContent = PINS.speedo);
+  }
+
+  /* zero_us/full_us/trim_us deliberately NOT taken from here: the state event
+     carries them 20 times a second off the needle models, which is the one
+     authority, and applyGaugeCal() already follows it. Only full scale is
+     unique to this event. */
+  const fullChanged = spdG ? setSpeedoFull(spdG.full_value) : false;
+
+  addLog(changed.length || fullChanged
+    ? "dashboard: pin map applied · " + changed.concat(fullChanged
+        ? ["speedo full scale→" + SPEEDO_FULL] : []).join(", ")
+    : "dashboard: pin map received, nothing to change", "info");
+}
+
+buildPinTable();
+buildLcdTable();
+
+/* =====================================================================
+   5. CALIBRATION
+   Two halves that have nothing to do with each other: the servo gauges,
+   where the numbers are pulse widths and only two of the four ever reach
+   the board, and the wheel, where the numbers are raw HID counts and
+   nothing is written to the device at all.
+   ===================================================================== */
+const CAL_NAME = {rpm:"Rev counter", speed:"Speedometer"};
+const CAL_CMD  = {rpm:"RPM",         speed:"SPEED"};
+const CAL_PIN  = {rpm:"tacho",       speed:"speedo"};
+
+/* field, label, does the board hold it in RAM rather than the dashboard */
+const CAL_FIELDS = [
+  ["zero", "Zero", false],
+  ["full", "Full", false],
+  ["trim", "Trim", true],
+  ["span", "Span", true]
+];
+/* Roughly one degree on these servos, and comfortably past the firmware's
+   8 µs deadband, so every press actually moves the needle. */
+const CAL_STEP = 10;
+/* SERVO_US_MIN / SERVO_US_MAX from the sketch. attach() is given these, so a
+   pulse outside them is clamped by the library and the number on the screen
+   would quietly stop being the number on the pin. */
+const CAL_US_MIN = 300, CAL_US_MAX = 2600;
+
+function calLimits(field){
+  if(field === "trim") return [-500, 500];
+  if(field === "span") return [50, CAL_US_MAX - CAL_US_MIN];
+  return [CAL_US_MIN, CAL_US_MAX];
+}
+/* Span is not stored: it is the distance between the two ends, exactly as
+   Gauge::span() computes it on the board. */
+function calValue(g, field){
+  const d = DIALS[g];
+  return field === "zero" ? d.zero
+       : field === "full" ? d.fullUs
+       : field === "trim" ? d.trim
+       : Math.abs(d.fullUs - d.zero);
+}
+/* Written into the model as the value is pushed, not when the answer comes
+   back: otherwise three quick presses of + all read the same starting number
+   and send the same microsecond three times. The reply is still the authority
+   and overwrites this a moment later. */
+function setCalValue(g, field, us){
+  const d = DIALS[g];
+  if(field === "zero")      d.zero   = us;
+  else if(field === "full") d.fullUs = us;
+  else if(field === "trim") d.trim   = us;
+  // Gauge::setSpan() — the direction of travel is kept, which matters here
+  // because both of these gauges run backwards.
+  else d.fullUs = (d.fullUs >= d.zero) ? d.zero + us : d.zero - us;
+}
+
+function buildCalGauge(g){
+  const rows = CAL_FIELDS.map(f => {
+    const lab  = esc(CAL_NAME[g] + " " + f[1].toLowerCase() + ", microseconds");
+    const step = (d, sign) =>
+      '<button class="sm" data-calg="' + esc(g) + '" data-calf="' + esc(f[0]) +
+      '" data-calstep="' + d + '" title="' + sign + CAL_STEP + ' µs, about one degree"' +
+      ' aria-label="' + lab + ", " + (d < 0 ? "down" : "up") + '">' + sign + "</button>";
+    return '<div class="calrow"><b>' + esc(f[1]) + "</b>" + step(-CAL_STEP, "−") +
+      '<input type="number" id="ci-' + esc(g) + "-" + esc(f[0]) + '" step="1" inputmode="numeric"' +
+      ' autocomplete="off" data-calg="' + esc(g) + '" data-calf="' + esc(f[0]) +
+      '" aria-label="' + lab + '">' + step(CAL_STEP, "+") + "<em>µs</em>" +
+      (f[2] ? '<span class="ram">board RAM</span>' : "") + "</div>";
+  }).join("");
+
+  return "<h2>" + esc(CAL_NAME[g]) + ' <i>servo on pin <b class="pn-' + esc(CAL_PIN[g]) + '">' +
+      esc(PINS[CAL_PIN[g]]) + "</b> · <code>" + esc(CAL_CMD[g]) + "</code></i></h2>" +
+    '<div class="calwrap">' +
+      "<div>" + buildDial(g, "cal-") + "</div>" +
+      "<div>" +
+        '<div class="gaugefoot"><b id="cf-' + esc(g) + '">—</b>' +
+          '<span id="cfu-' + esc(g) + '">' + esc(DIALS[g].unit) + " at the needle</span>" +
+          '<span class="us" id="cfus-' + esc(g) + '">— µs</span></div>' +
+        rows +
+        '<div class="btns" style="margin-top:13px">' +
+          '<button class="sm" data-cmd="' + esc(CAL_CMD[g]) + ' ZERO">Park at zero</button>' +
+          '<button class="sm" data-cmd="' + esc(CAL_CMD[g]) + ' FULL">Park at full</button>' +
+          '<button class="sm" data-cmd="' + esc(CAL_CMD[g]) + ' SWEEP">Sweep</button>' +
+          '<button class="sm" data-auto="' + esc(g) + '">Auto</button>' +
+        "</div>" +
+        '<div class="sub" id="cst-' + esc(g) + '">—</div>' +
+        '<div class="calerr" id="cerr-' + esc(g) + '" hidden></div>' +
+      "</div>" +
+    "</div>" +
+    '<div class="sub"><b>Zero</b> is where the needle rests and <b>full</b> is the far end — ' +
+      "on these gauges full is the <i>smaller</i> pulse, because both servos run reversed. " +
+      "<b>Trim</b> slides the whole scale when every reading is out by the same amount; " +
+      "<b>span</b> stretches the far end away from zero when zero is right but the top falls " +
+      "short. Park the needle at an end first, or the easing will walk it away from you while " +
+      "you work.</div>";
+}
+
+/* Never fight the user: an input being typed into is left alone, and a state
+   event that was already in flight when a value was pushed is ignored for a
+   moment rather than allowed to bounce the number back. */
+const calBusy = {rpm:0, speed:0};
+
+function calFields(g){
+  for(const f of CAL_FIELDS){
+    const el = $("ci-" + g + "-" + f[0]);
+    if(el && document.activeElement !== el) el.value = calValue(g, f[0]);
+  }
+  const d = DIALS[g];
+  const z = $("slz-" + g), fu = $("slf-" + g), t = $("trim-" + g);
+  // The slider's ends are what the servo is actually written, so they carry
+  // the trim; the boxes above hold the untrimmed endpoints, as the board does.
+  if(z)  z.textContent  = "ZERO · " + (d.zero + d.trim) + " µs";
+  if(fu) fu.textContent = "FULL · " + (d.fullUs + d.trim) + " µs";
+  if(t)  t.textContent  = (d.trim < 0 ? "−" : "+") + Math.abs(d.trim) + " µs";
+}
+function calErr(g, msg){
+  const el = $("cerr-" + g);
+  if(!el) return;
+  el.textContent = msg || "";
+  el.hidden = !msg;
+}
+
+/* The constants at the top of this file are only the compiled-in defaults.
+   Once a session has been calibrated the dial, the slider and the on-screen
+   needle have to follow, or what is drawn here stops meaning the needle on
+   the rig. */
+const calNum = (v, fallback) =>
+  (typeof v === "number" && isFinite(v)) ? Math.round(v) : fallback;
+
+function mergeCal(g, c){
+  if(!c) return;
+  const d = DIALS[g];
+  const z = calNum(c.zero_us, d.zero),
+        f = calNum(c.full_us, d.fullUs),
+        t = calNum(c.trim_us, d.trim);
+  if(z === d.zero && f === d.fullUs && t === d.trim) return false;
+  d.zero = z; d.fullUs = f; d.trim = t;
+  calFields(g);
+  return true;
+}
+function applyGaugeCal(cal){
+  if(!cal) return;
+  const now = performance.now();
+  for(const g of ["rpm", "speed"]){
+    if(now - calBusy[g] < 600) continue;      // a push of our own is still landing
+    mergeCal(g, cal[g]);
+  }
+}
+
+function pushCal(g, field, raw){
+  const [lo, hi] = calLimits(field);
+  const el = $("ci-" + g + "-" + field);
+  /* An emptied box is not a zero. A number input hands back "" for anything it
+     could not parse, and Number("") is 0, which would clamp to the bottom of
+     the servo's range and drive the needle into its mechanical stop — so the
+     string is checked before it is ever turned into a number. */
+  const raws = String(raw === null || raw === undefined ? "" : raw).trim();
+  if(raws === ""){ calFields(g); return; }            // put back what it was
+  let us = Math.round(Number(raws));
+  if(!isFinite(us)){ calFields(g); return; }          // gibberish: put it back
+  us = clamp(us, lo, hi);
+  if(el) el.value = us;                               // show the clamp, never hide it
+  setCalValue(g, field, us);
+  calFields(g);
+  calBusy[g] = performance.now();
+  postJson("/calibrate/gauge", {gauge:g, field:field, us:us}).then(j => {
+    calBusy[g] = 0;
+    if(!j){ calErr(g, "No answer from the dashboard — is dashboard.py still running?"); return; }
+    calErr(g, j.ok === false ? (j.error || "the board would not take it") : "");
+    mergeCal(g, j);
+    calFields(g);                                     // refused values snap back
+  });
+}
+function bumpCal(g, field, delta){ pushCal(g, field, calValue(g, field) + delta); }
+
+$("view-cal").addEventListener("click", e => {
+  const s = e.target.closest("[data-calstep]");
+  if(s){ bumpCal(s.dataset.calg, s.dataset.calf, +s.dataset.calstep); return; }
+  const w = e.target.closest("[data-steer]");
+  if(w) steerCal(w.dataset.steer);
+});
+/* change, not input: typing "650" one key at a time would otherwise send 6
+   and then 65 to the servo on the way. */
+$("view-cal").addEventListener("change", e => {
+  const el = e.target.closest("input[data-calg]");
+  if(el) pushCal(el.dataset.calg, el.dataset.calf, el.value);
+});
+
+/* ---- steering ---- */
+/* Only the three that photograph the wheel's current position need a wheel on
+   the end of the wire. Invert and reset are ours to change either way. */
+const steerCapBtns = [].slice.call(document.querySelectorAll("#cal-steer [data-steer]"))
+                       .filter(b => ["center", "left", "right"].indexOf(b.dataset.steer) >= 0);
+function steerInvert(){
+  return !!(st.wheel && st.wheel.steer_cal && st.wheel.steer_cal.invert);
+}
+function steerCal(action){
+  const body = {action:action};
+  if(action === "invert") body.invert = !steerInvert();
+  postJson("/calibrate/steer", body).then(j => {
+    if(!j){ addLog("dashboard: /calibrate/steer did not answer", "local"); return; }
+    if(j.ok === false){
+      addLog("dashboard: steering " + action + " refused" + (j.error ? " — " + j.error : ""), "local");
+      return;
+    }
+    /* Apply it here rather than waiting for the next state event, so the
+       number appears under the button that captured it. */
+    if(st.wheel) st.wheel.steer_cal = {center:j.center, left:j.left, right:j.right,
+                                       invert:!!j.invert};
+    const n = v => (v === null || v === undefined) ? "—" : v;
+    addLog("dashboard: steering " + action + " · centre " + n(j.center) + " · left " +
+           n(j.left) + " · right " + n(j.right) + (j.invert ? " · inverted" : ""), "info");
+    paintCal(stale());
+  });
+}
+
+/* ---- the lines for the sketch ---- */
+$("cal-sketch-btn").onclick = async () => {
+  const out = $("cal-sketch-out"), btn = $("cal-sketch-btn");
+  btn.disabled = true;
+  try{
+    const r = await fetch("/calibrate/sketch", {headers:{"Accept":"text/plain"}});
+    const text = await r.text();
+    out.textContent = r.ok ? text
+      : "The dashboard answered " + r.status + ".\n\n" + text;
+    $("cal-sketch-copy").hidden = !r.ok;
+  }catch(e){
+    out.textContent = "Could not reach /calibrate/sketch. Is dashboard.py still running?";
+    $("cal-sketch-copy").hidden = true;
+  }finally{
+    out.hidden = false;
+    btn.disabled = false;
+  }
+};
+$("cal-sketch-copy").onclick = async () => {
+  const out = $("cal-sketch-out"), btn = $("cal-sketch-copy");
+  const say = t => { btn.textContent = t; setTimeout(() => btn.textContent = "Copy", 1800); };
+  try{
+    await navigator.clipboard.writeText(out.textContent);
+    say("Copied");
+  }catch(e){
+    /* Served over plain http on the LAN this is not a secure context, so the
+       clipboard API may not exist at all. Selecting the block is then the most
+       we can do for them. */
+    const r = document.createRange();
+    r.selectNodeContents(out);
+    const sel = window.getSelection();
+    sel.removeAllRanges();
+    sel.addRange(r);
+    say("Press Ctrl+C");
+  }
+};
+
+function paintCal(sstale){
+  if($("view-cal").hidden) return;
+
+  for(const g of ["rpm", "speed"]){
+    const us   = g === "rpm" ? st.tacho_us : st.speedo_us;
+    const dead = us === null || us === undefined;
+    const cal  = (st.gauge_cal || {})[g] || {};
+    const parked = !!cal.parked;
+    const f    = dead ? 0 : usToFrac(g, us);
+    const gain = travelGain(g);
+    const svg  = $("dial-cal-" + g);
+
+    svg.classList.toggle("dead", dead);
+    svg.classList.toggle("parked", parked && !dead);
+    $("ndl-cal-" + g).setAttribute("transform",
+      "rotate(" + fracToAngle(f * gain).toFixed(2) + " " + CX + " " + CY + ")");
+    const tf = sstale ? 0 : (g === "rpm" ? rpmFraction() : speedFraction());
+    $("tgt-cal-" + g).setAttribute("transform",
+      "rotate(" + fracToAngle(tf * gain).toFixed(2) + " " + CX + " " + CY + ")");
+
+    $("cf-" + g).textContent   = dead ? "—" : String(Math.round(f * DIALS[g].full));
+    $("cfus-" + g).textContent = dead ? "no servo" : (us + " µs");
+    $("cst-" + g).textContent  = dead
+      ? "No servo is answering, so there is nothing here to move."
+      : parked
+        ? "Parked at " + us + " µs — it will stay there until you press Auto."
+        : "Following the telemetry. Park it at an end before nudging the numbers.";
+  }
+  const unit = st.mph ? "mph" : "km/h";
+  $("cfu-speed").textContent    = unit + " at the needle";
+  $("dtitle-cal-speed").textContent = st.mph ? "MPH" : "KM/H";
+
+  /* ---- the wheel ---- */
+  const w    = st.wheel;
+  const live = !!(w && w.connected);
+  const cs   = (w && w.steer_cal) || {};
+  for(const b of steerCapBtns) b.disabled = !live;
+
+  $("cs-id").textContent   = live ? (w.product || "connected") : "not connected";
+  $("cs-raw").textContent  = (live && w.steer_raw !== undefined) ? String(w.steer_raw) : "—";
+  const s0 = live ? clamp(w.steering || 0, -1, 1) : null;
+  $("cs-norm").textContent = s0 === null ? "—" : (s0 >= 0 ? "+" : "") + s0.toFixed(3);
+  const half = s0 === null ? 0 : Math.abs(s0) * 50;
+  const bar  = $("cs-bar");
+  bar.style.left  = (s0 === null || s0 >= 0 ? 50 : 50 - half) + "%";
+  bar.style.width = half + "%";
+
+  const put = (id, v) => {
+    const el = $(id), got = v !== null && v !== undefined;
+    el.textContent = got ? String(v) : "not captured";
+    setCls(el, got ? "" : "dim");
+  };
+  put("cs-c", cs.center); put("cs-l", cs.left); put("cs-r", cs.right);
+  $("cs-inv").textContent = cs.invert ? "yes" : "no";
+  setCls($("cs-inv"), cs.invert ? "" : "dim");
+  $("cs-invert").classList.toggle("on", !!cs.invert);
+}
+
+["rpm", "speed"].forEach(g => { $("cal-" + g).innerHTML = buildCalGauge(g); calFields(g); });
+
+/* =====================================================================
+   6. CONTROLS
+   ===================================================================== */
+const SOURCES = [
+  ["off",   "Off",             "Nothing is being sent. The board blanks to its waiting screen after 1.5 s of silence."],
+  ["demo",  "Demo",            "A fake 12-second pull through six gears — speed ramps to the top while the revs saw from 2200 to 8000 six times. No game needed."],
+  ["forza", "Forza Horizon",   "In game: <b>Settings → HUD and Gameplay</b>, bottom of the list. <b>Data Out ON</b>, IP <b>127.0.0.1</b>, port <b>5300</b>."],
+  ["lfs",   "Live for Speed",  "In <b>cfg.txt</b>: <b>OutGauge Mode 1</b>, OutGauge IP <b>127.0.0.1</b>, OutGauge Port <b>30000</b>. OutGauge carries no max RPM, so the rev bar learns it after one pull to the redline."],
+  ["ac",    "Assetto Corsa",   "Just run the game — it reads shared memory, no config needed. Works for ACC too."],
+  ["ets2",  "ETS2",            "Needs the third-party <b>scs-sdk-plugin</b> installed in the game. It sends no pedal data, so throttle and brake stay at zero."],
+  ["ats",   "ATS",             "Same plugin as ETS2, same shared memory map. No pedal data."]
+];
+$("srcs").innerHTML = SOURCES.map(s =>
+  '<button class="sm" data-src="' + s[0] + '" aria-pressed="false">' + s[1] +
+  "</button>").join("");
+/* Built once and never rebuilt, so the list is taken once too — paint() used
+   to run a whole-document querySelectorAll for it 20 times a second. */
+const srcBtns = [].slice.call($("srcs").querySelectorAll("[data-src]"));
+$("srcs").addEventListener("click", e => {
+  const b = e.target.closest("[data-src]");
+  if(b) setSource(b.dataset.src);
+});
+
+document.querySelectorAll("[data-cmd]").forEach(b => {
+  b.addEventListener("click", () => sendCmd(b.dataset.cmd));
+});
+const autoBtns = [].slice.call(document.querySelectorAll("[data-auto]"));
+autoBtns.forEach(b => {
+  b.setAttribute("aria-pressed", "false");
+  b.addEventListener("click", () => {
+    const g = b.dataset.auto;
+    touchedAt[g] = 0;
+    autoServo(g);
+  });
+});
+$("rawform").addEventListener("submit", e => {
+  e.preventDefault();
+  const v = $("rawcmd").value.trim();
+  if(!v) return;
+  sendCmd(v);
+  $("rawcmd").value = "";
+});
+
+/* ---- sliders: at most 20 posts a second, leading + trailing ---- */
+function throttle(fn, ms){
+  let last = 0, timer = null, pending = null;
+  /* The trailing call is the guarantee that matters: pending is overwritten by
+     every later value and the queued timer sends whatever it holds when it
+     fires, so the last value the user chose always lands within `ms`. Nothing
+     needs to go round this to "make sure the final value arrives". */
+  return v => {
+    pending = v;
+    const now = performance.now();
+    const wait = ms - (now - last);
+    if(wait <= 0){
+      last = now; const p = pending; pending = null; fn(p);
+    }else if(!timer){
+      timer = setTimeout(() => {
+        timer = null;
+        if(pending === null) return;
+        last = performance.now(); const p = pending; pending = null; fn(p);
+      }, wait);
+    }
+  };
+}
+const touchedAt = {rpm:0, speed:0};
+const dragging  = {rpm:false, speed:false};
+
+["rpm","speed"].forEach(g => {
+  const el = $("sl-" + g);
+  const push = throttle(us => parkServo(g, us), 50);   // 20 Hz ceiling
+  const onMove = () => {
+    touchedAt[g] = performance.now();
+    const us = fracToUs(g, el.value / 1000);
+    $("gfus-" + g).textContent = us + " µs";
+    push(us);
+  };
+  el.addEventListener("pointerdown", () => dragging[g] = true);
+  el.addEventListener("keydown",     () => dragging[g] = true);
+  el.addEventListener("input",  onMove);
+  el.addEventListener("change", () => {
+    dragging[g] = false;
+    touchedAt[g] = performance.now();
+    /* Through the same rate limiter, never around it. Arrow keys on a focused
+       range fire input AND change on every keypress and Windows auto-repeat
+       runs at about 30/s, so calling parkServo() directly here added ~30
+       unthrottled POSTs a second on top of the throttled 20 — roughly 50 Hz of
+       `RPM <us>` into an Uno with a 64-byte RX buffer that is already taking 30
+       telemetry frames a second. On mouse release it also duplicated the
+       trailing call, so every drag ended with two identical POSTs. The
+       throttle's trailing call is what lands the final value. */
+    push(fracToUs(g, el.value / 1000));
+  });
+  window.addEventListener("pointerup", () => dragging[g] = false);
+});
+
+/* =====================================================================
+   Rendering
+   ===================================================================== */
+const revSegs = [];
+(function buildRev(){
+  const el = $("revbar");
+  for(let i = 0; i < 30; i++){
+    const s = document.createElement("span");
+    if(i / 30 >= 0.88) s.className = "red";
+    el.appendChild(s);
+    revSegs.push(s);
+  }
+})();
+
+/* --- steering wheel ------------------------------------------------------
+   A separate USB device, so it has its own connected flag: the dash boards
+   can be up while the wheel is not, and saying so is more useful than a panel
+   full of zeroes that looks live.                                          */
+let wheelBtnCells = 0;
+let axesKey = "", axRows = [];
+
+function paintWheel(){
+  const w = st.wheel;
+  const off = $("w-off");
+
+  if(!w || !w.connected){
+    $("wheel-id").textContent = "not connected";
+    off.hidden = false;
+    off.textContent = (w && w.error)
+      ? "Not reading the wheel: " + w.error
+      : "No wheel found. It appears as a HID joystick (EMC, 0013:1984), not a COM port.";
+    $("w-steer").textContent = "—";
+    $("w-steerraw").textContent = "—";
+    $("w-btncount").textContent = "—";
+    $("w-steerbar").style.width = "0";
+    $("wheel-rot").style.transform = "rotate(0deg)";
+    $("w-pedals").innerHTML = "";
+    $("w-axes").innerHTML = "";
+    $("w-axhead").hidden = true;
+    $("w-buttons").innerHTML = "";
+    wheelBtnCells = 0;
+    axesKey = ""; axRows = [];
+    return;
+  }
+
+  off.hidden = true;
+  $("wheel-id").textContent = w.product || "connected";
+
+  const s0 = clamp(w.steering || 0, -1, 1);
+  $("w-steer").textContent = (s0 >= 0 ? "+" : "") + s0.toFixed(3);
+  $("w-steerraw").textContent = (w.steer_raw === undefined ? "—" : w.steer_raw)
+    + (w.steer_invert ? "  (inverted)" : "");
+  /* 450 degrees each way is a normal wheel's travel; this is a picture of the
+     axis, not a claim about the real rotation angle, which EMC knows and we
+     do not. */
+  $("wheel-rot").style.transform = "rotate(" + (s0 * 450).toFixed(1) + "deg)";
+
+  const bar = $("w-steerbar");
+  const half = Math.abs(s0) * 50;
+  bar.style.left  = (s0 >= 0 ? 50 : 50 - half) + "%";
+  bar.style.width = half + "%";
+
+  /* pedals */
+  const peds = w.pedals || {};
+  const names = Object.keys(peds).sort();
+  const host = $("w-pedals");
+  if(host.childElementCount !== names.length){
+    host.innerHTML = names.map(n =>
+      '<div class="ped"><span>' + esc(peds[n].label || n) +
+      '</span><div><i data-ped="' + esc(n) + '"></i></div>' +
+      '<u data-pedv="' + esc(n) + '">0</u></div>').join("");
+  }
+  for(const n of names){
+    const fill = host.querySelector('[data-ped="' + CSS.escape(n) + '"]');
+    const val  = host.querySelector('[data-pedv="' + CSS.escape(n) + '"]');
+    if(fill) fill.style.width = (clamp(peds[n].norm || 0, 0, 1) * 100).toFixed(1) + "%";
+    if(val)  val.textContent = peds[n].raw;
+  }
+
+  /* Every axis the decoder reports, in descriptor order, not just the four
+     guessed to be pedals - so a wrong guess about which axis is which shows up
+     instead of hiding. Same discipline as the button grid: the rows are built
+     once, keyed on the axis names, and only the values move afterwards. */
+  const axes   = w.axes || {};
+  const anames = Object.keys(axes);
+  const ahost  = $("w-axes");
+  const akey   = anames.join(",");
+  if(axesKey !== akey){
+    axesKey = akey;
+    /* Which axis is the steering one is the backend's business - it is the
+       thing holding the descriptor. Unstated means unmarked, rather than a
+       guess that could label the wrong bar. */
+    const steerAxis = w.steer_axis || null;
+    ahost.innerHTML = anames.map(n => {
+      const cls = n === steerAxis ? "ax steer" : (peds[n] ? "ax pedal" : "ax");
+      const lab = (peds[n] && peds[n].label) ? peds[n].label
+                : n === steerAxis ? "Steering" : n;
+      return '<div class="' + cls + '" title="' + esc(lab) + '"><b>' + esc(n) +
+             '</b><div><i data-ax="' + esc(n) + '"></i></div>' +
+             '<u data-axv="' + esc(n) + '">—</u></div>';
+    }).join("");
+    axRows = anames.map(n => ({
+      name: n,
+      fill: ahost.querySelector('[data-ax="'  + CSS.escape(n) + '"]'),
+      val:  ahost.querySelector('[data-axv="' + CSS.escape(n) + '"]')
+    }));
+    $("w-axhead").hidden = anames.length === 0;
+  }
+  for(const row of axRows){
+    const a = axes[row.name];
+    if(!a) continue;
+    if(row.fill) row.fill.style.width =
+      (clamp(a.norm === undefined ? 0 : a.norm, 0, 1) * 100).toFixed(1) + "%";
+    if(row.val) row.val.textContent = a.raw;
+  }
+
+  /* buttons - 136 cells is a lot to rebuild 20 times a second, so the grid is
+     built once and only the .on class is touched afterwards. */
+  const count = w.button_count || 0;
+  const grid = $("w-buttons");
+  if(wheelBtnCells !== count){
+    let html = "";
+    for(let i = 1; i <= count; i++) html += "<span data-btn='" + i + "'>" + i + "</span>";
+    grid.innerHTML = html;
+    wheelBtnCells = count;
+  }
+  const on = new Set(w.buttons || []);
+  for(const cell of grid.children){
+    const isOn = on.has(+cell.dataset.btn);
+    if(isOn !== cell.classList.contains("on")) cell.classList.toggle("on", isOn);
+  }
+  $("w-btncount").textContent = on.size
+    ? on.size + " down of " + count + " · " + [...on].join(", ")
+    : count + " · none down";
+}
+
+/* className = is a write even when the string is identical, and every write
+   invalidates style for that element. Six of them at 20 Hz is a lot of
+   nothing. */
+let lastSource = null;
+const setCls = (el, c) => { if(el.className !== c) el.className = c; };
+
+function paint(){
+  const sstale = stale();
+  /* Before anything is drawn: the dials, the sliders and the needle model all
+     read DIALS, and the board's endpoints are whatever the backend last said
+     they were. */
+  applyGaugeCal(st.gauge_cal);
+  paintWheel();
+
+  /* header */
+  const dot = $("dot");
+  dot.classList.remove("ok", "warn");
+  let text;
+  if(!streamUp){ text = "dashboard offline — reconnecting…"; }
+  else if(!st.connected){ text = "no board on the serial port"; }
+  else if(sstale){ dot.classList.add("warn"); text = "board on " + (st.port || "?") + " · no telemetry"; }
+  else{ dot.classList.add("ok");
+        text = "live · " + (st.port || "?") + (st.sketch ? " · " + st.sketch : ""); }
+  /* A refused command or a dead backend gets a few seconds up here, where the
+     connection state already lives. The log is the record; this is the signal,
+     and it survives the log being paused or scrolled away. */
+  if(noteText && performance.now() < noteUntil){
+    dot.classList.remove("ok");
+    dot.classList.add("warn");
+    text = noteText;
+  }else if(noteText){ noteText = ""; }
+  $("conn").textContent = text;
+
+  /* banner */
+  const ban = $("banner");
+  if(!streamUp){
+    ban.hidden = false;
+    $("banner-title").textContent = "Dashboard offline";
+    $("banner-text").textContent  = "The event stream dropped. Is dashboard.py still running? " +
+      "Retrying on its own — nothing below is live.";
+  }else if(!st.connected){
+    ban.hidden = false;
+    $("banner-title").textContent = "No board connected";
+    $("banner-text").textContent  = "Nothing is answering on a serial port. A COM port can only be " +
+      "held by one program, so close any running sim_bridge.py, forza_bridge.py, hold.py, " +
+      "find_board.py or Arduino serial monitor, then restart the dashboard. " +
+      "The screens below show what the firmware would be drawing.";
+  }else ban.hidden = true;
+
+  /* hero */
+  $("hero").classList.toggle("dead", !streamUp);
+  const shift = isShift();
+  $("h-speed").textContent   = sstale ? "—" : String(clamp(Math.round(st.speed), 0, 999));
+  $("h-speed-u").textContent = st.mph ? "MPH" : "KM/H";
+  $("h-gear").textContent    = sstale ? "–" : gearText();
+  $("h-rpm").textContent     = sstale ? "—" : String(clamp(Math.round(st.rpm), 0, 99999));
+  $("h-rpm-sub").textContent = shift ? "SHIFT UP" : ("RPM of " + st.max_rpm);
+  $("h-rpm-box").classList.toggle("shift", shift);
+
+  const frac = sstale ? 0 : rpmFraction();
+  const lit  = Math.round(frac * revSegs.length);
+  for(let i = 0; i < revSegs.length; i++) revSegs[i].classList.toggle("lit", i < lit);
+  /* the flash itself is driven by tick(), on the firmware's 2 Hz clock */
+
+  const thr = clamp(st.throttle, 0, 255), brk = clamp(st.brake, 0, 255);
+  $("p-thr").style.width = (sstale ? 0 : thr / 255 * 100) + "%";
+  $("p-brk").style.width = (sstale ? 0 : brk / 255 * 100) + "%";
+  $("v-thr").textContent = sstale ? "—" : thr;
+  $("v-brk").textContent = sstale ? "—" : brk;
+
+  /* readouts */
+  const srcName = (SOURCES.find(s => s[0] === st.source) || [null, st.source])[1];
+  $("k-source").textContent = srcName || "—";
+  $("k-race").textContent   = st.race_on ? "racing" : "menu / paused";
+  setCls($("k-race"), st.race_on ? "good" : "dim");
+  $("k-speed").textContent  = st.speed + " " + (st.mph ? "mph" : "km/h");
+  $("k-rpm").textContent    = st.rpm;
+  $("k-max").textContent    = st.max_rpm;
+  $("k-gear").textContent   = gearText() + "  (" + st.gear + ")";
+  $("k-thr").textContent    = thr + " / 255";
+  $("k-brk").textContent    = brk + " / 255";
+
+  $("k-port").textContent   = st.port || "—";
+  setCls($("k-port"), st.port ? "" : "dim");
+  $("k-sketch").textContent = st.sketch || "—";
+  setCls($("k-sketch"), st.sketch ? "" : "dim");
+  $("k-frames").textContent = st.frames;
+  $("k-packets").textContent = st.packets;
+  $("k-ram").textContent    = st.free_ram === null || st.free_ram === undefined
+                              ? "—" : st.free_ram + " B";
+  setCls($("k-ram"), (st.free_ram !== null && st.free_ram !== undefined && st.free_ram < 300)
+                     ? "warn" : "");
+  $("k-tacho").textContent  = st.tacho_us  === null || st.tacho_us  === undefined
+                              ? "no servo" : st.tacho_us + " µs";
+  setCls($("k-tacho"), st.tacho_us == null ? "dim" : "");
+  $("k-speedo").textContent = st.speedo_us === null || st.speedo_us === undefined
+                              ? "no servo" : st.speedo_us + " µs";
+  setCls($("k-speedo"), st.speedo_us == null ? "dim" : "");
+
+  /* dials */
+  paintDial("rpm",   st.tacho_us,  sstale ? 0 : rpmFraction());
+  paintDial("speed", st.speedo_us, sstale ? 0 : speedFraction());
+  $("dtitle-speed").textContent = st.mph ? "MPH" : "KM/H";
+  $("gfu-speed").textContent    = (st.mph ? "mph" : "km/h") + " at the needle";
+
+  /* keep the sliders honest, but never fight the user */
+  const now = performance.now();
+  ["rpm","speed"].forEach(g => {
+    const us = g === "rpm" ? st.tacho_us : st.speedo_us;
+    if(dragging[g] || now - touchedAt[g] < 1200 || us === null || us === undefined) return;
+    $("sl-" + g).value = Math.round(usToFrac(g, us) * 1000);
+  });
+
+  paintCal(sstale);
+
+  /* source buttons — only when the source has actually changed. This block used
+     to run a whole-document querySelectorAll and re-parse an HTML string into
+     #src-hint 20 times a second for a value that moves maybe once a minute. */
+  if(st.source !== lastSource){
+    lastSource = st.source;
+    for(const b of srcBtns){
+      const on = b.dataset.src === st.source;
+      b.classList.toggle("on", on);
+      b.setAttribute("aria-pressed", String(on));   // state, not just colour
+    }
+    const hint = SOURCES.find(s => s[0] === st.source);
+    $("src-hint").innerHTML = hint ? hint[2] : "—";
+  }
+
+  /* The Auto buttons never reflected anything, so there was no way to tell a
+     parked needle from a following one without reading the µs. */
+  for(const b of autoBtns){
+    const gc = st.gauge_cal && st.gauge_cal[b.dataset.auto];
+    const following = !!gc && !gc.parked;
+    b.classList.toggle("on", following);
+    b.setAttribute("aria-pressed", String(following));
+  }
+
+  /* glass */
+  $("glass").classList.toggle("dead", !streamUp);
+  $("glass-note").textContent = !streamUp ? "stream down — frozen"
+    : !st.connected ? "preview — no board attached"
+    : sstale ? "waiting screen — no frame for 1.5 s"
+    : "live";
+}
+
+/* The board's SHIFT indication is drawRpmBar XOR-inverting the whole 128x8 rev
+   bar every 60 ms. On the glass that is a few square millimetres; on this page
+   at k = 6 it is a 768 x 48 CSS-pixel band swinging black to white 8.3 times a
+   second — past the three-flashes-a-second photosensitivity threshold, on the
+   one element you are meant to stare at while driving. Under
+   prefers-reduced-motion it is drawn solid-inverted instead, which is also
+   easier to read at a glance. Only the 8.3 Hz one: the two 2 Hz clocks (the
+   LCD's "SHIFT UP!" and the hero rev bar) are under the threshold and are left
+   matching the firmware exactly. */
+const calmMq = window.matchMedia ? matchMedia("(prefers-reduced-motion: reduce)") : null;
+const oledBlink = now => (calmMq && calmMq.matches) || (Math.floor(now / 60) % 2 === 1);
+
+/* ---- the two screen clocks, quantised exactly like the firmware ---- */
+let lastLcdTick = -1, lastOledTick = -1, lastHeroTick = -1;
+function tick(){
+  const now = performance.now();
+
+  /* Neither replica is on screen while the Calibration or Wiring tab is up.
+     The loop stays alive so the clocks stay quantised — only the drawing is
+     skipped, rather than rebuilding and blitting a 4096-pixel buffer 20 times a
+     second into a node nobody can see. */
+  const shown = !$("view-dash").hidden;
+
+  const ot = Math.floor(now / DRAW_MS);
+  if(shown && ot !== lastOledTick){
+    lastOledTick = ot;
+    if(stale()) drawOledWaiting();
+    else drawOled(oledBlink(now));                      // ~8.3 Hz strobe
+    blitOled();
+  }
+
+  const lt = Math.floor(now / LCD_MS);
+  if(shown && lt !== lastLcdTick){
+    lastLcdTick = lt;
+    paintLcd(lcdBuildFrame(Math.floor(now / 250) % 2 === 1));   // 2 Hz flash
+  }
+
+  const ht = Math.floor(now / 125);
+  if(ht !== lastHeroTick){
+    lastHeroTick = ht;
+    const shift = isShift() && !stale();
+    $("revbar").classList.toggle("flash", shift && (Math.floor(now / 250) % 2 === 1));
+    if(streamUp && lastStateAt && now - lastStateAt > STALE_MS + 400) paint();
+  }
+  requestAnimationFrame(tick);
+}
+
+/* ---- size the two panels so they line up on an integer OLED scale ---- */
+function resize(){
+  const avail = $("glass").clientWidth - 26;             // minus the bezel padding
+  const dpr = window.devicePixelRatio || 1;
+  /* The scale is chosen in DEVICE pixels, not CSS pixels. On a Windows display
+     at 125% or 150% an integer count of CSS pixels is a fraction of a device
+     pixel — 3 CSS px is 3.75 device px — so nearest-neighbour gives some OLED
+     pixels four device rows and their neighbours three, and the replica
+     shimmers with uneven column widths on the one widget meant to be exact. */
+  const kDev = clamp(Math.floor(avail * dpr / W), 2, Math.max(2, Math.round(6 * dpr)));
+  oledCv.width  = W * kDev;                              // backing store == device grid
+  oledCv.height = H * kDev;
+  const t = W * kDev / dpr;                              // its width in CSS px
+  oledCv.style.width  = t + "px";
+  oledCv.style.height = (H * kDev / dpr) + "px";
+  /* LCD total width = 16*5u + 15u + 2*2u = 99u, so u = t/99 lines the two up.
+     Snapped down to a whole device pixel: every column is 5u, every gap 1u and
+     every solid block a fifth of a cell, so a fractional u put a grey fringe on
+     every one of those edges. A few px narrower than the OLED is the price. */
+  const u = Math.max(2, Math.floor(t / 99 * dpr)) / dpr;
+  $("lcd").style.setProperty("--u", u + "px");
+  blitOled();                                            // writing .width wiped it
+}
+window.addEventListener("resize", resize);
+/* devicePixelRatio changes when the window is dragged onto a monitor with a
+   different scale, and nothing fires a resize event for that. */
+let dprQuery = null;
+function onDprChange(){ resize(); watchDpr(); }
+function watchDpr(){
+  if(dprQuery && dprQuery.removeEventListener) dprQuery.removeEventListener("change", onDprChange);
+  if(!window.matchMedia) return;
+  dprQuery = matchMedia("(resolution: " + (window.devicePixelRatio || 1) + "dppx)");
+  if(dprQuery.addEventListener) dprQuery.addEventListener("change", onDprChange);
+}
+watchDpr();
+
+/* =====================================================================
+   Tabs + boot
+   ===================================================================== */
+const TABS = ["dash", "cal", "wiring"];
+function showTab(w){
+  for(const t of TABS){
+    const on = t === w;
+    const b = $("tab-" + t);
+    b.setAttribute("aria-selected", on);
+    /* Roving tabindex: the whole set is one stop in the page's tab order and
+       the arrow keys move within it, which is what role=tab promises. Three
+       tabs all sitting in the tab order is the thing that promise rules out. */
+    b.tabIndex = on ? 0 : -1;
+    $("view-" + t).hidden = !on;
+  }
+  if(w === "dash") resize();
+  // paintCal() does nothing while its tab is hidden, so it needs one paint on
+  // the way in rather than showing whatever was true when you last left it.
+  if(w === "cal") paint();
+}
+TABS.forEach(t => $("tab-" + t).onclick = () => showTab(t));
+$("tablist").addEventListener("keydown", e => {
+  const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1
+             : e.key === "Home" ? "first" : e.key === "End" ? "last" : 0;
+  if(!step) return;
+  const el = document.activeElement;
+  const i = el ? TABS.indexOf(String(el.id).replace(/^tab-/, "")) : -1;
+  if(i < 0) return;
+  e.preventDefault();
+  const n = step === "first" ? 0
+          : step === "last"  ? TABS.length - 1
+          : (i + step + TABS.length) % TABS.length;
+  showTab(TABS[n]);
+  $("tab-" + TABS[n]).focus();
+});
+
+resize();
+paint();
+requestAnimationFrame(tick);
+connect();
+</script>
+</body>
+</html>

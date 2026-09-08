@@ -1,0 +1,6 @@
+﻿wheelforge/build/
+wheelforge/dist/
+wheelforge/firmware/images/
+wheelforge/tools/*.exe
+__pycache__/
+*.pyc

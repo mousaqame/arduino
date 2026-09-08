@@ -1,0 +1,3 @@
+# PC side of the race dash.
+#   pip install -r requirements.txt
+pyserial>=3.5

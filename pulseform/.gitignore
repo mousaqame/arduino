@@ -1,0 +1,13 @@
+# Godot 4+ import cache and per-machine files
+.godot/
+/android/
+*.translation
+
+# Exports
+/build/
+export_presets.cfg
+
+# OS cruft
+.DS_Store
+Thumbs.db
+desktop.ini

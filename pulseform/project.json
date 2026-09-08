@@ -1,0 +1,31 @@
+{
+  "name": "Pulseform",
+  "slug": "pulseform",
+  "summary": "An original rhythm-driven platformer built in Godot 4 — a glowing runner that jumps to a synthesized beat. All assets, music and branding are generated in code, nothing imported.",
+  "status": "active",
+  "kind": "godot",
+  "started": "2026-07-25",
+  "tags": [
+    "godot",
+    "gdscript",
+    "game",
+    "rhythm",
+    "platformer"
+  ],
+  "docs": [
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "How it's built",
+      "path": "docs/guide.html"
+    },
+    {
+      "label": "Level schema",
+      "path": "Levels/level_01.json"
+    }
+  ],
+  "apps": [],
+  "notes": "Not a web app, so there's no dashboard/port to launch from the hub. To play: open this folder in Godot 4.4+ (Import the project.godot) and press F5. Everything is constructed in GDScript — the only non-code asset is icon.svg. Music and sound are synthesized at runtime, so the first time a track starts there is a brief one-time generation hitch while it renders the PCM."
+}

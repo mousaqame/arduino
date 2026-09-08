@@ -1,0 +1,122 @@
+{
+  "name": "Race Dash",
+  "slug": "race-dash",
+  "summary": "A physical racing dashboard for the DIY force-feedback wheel. Reads live telemetry from Forza Horizon 5, Assetto Corsa and Euro/American Truck Simulator, and shows speed, gear and RPM across two OLED panels and a 4-digit LED module on two NodeMCUs.",
+  "status": "active",
+  "kind": "arduino",
+  "started": "2026-08-10",
+  "tags": [
+    "esp8266",
+    "nodemcu",
+    "esp32",
+    "oled",
+    "ssd1306",
+    "forza",
+    "telemetry",
+    "udp",
+    "sim-racing",
+    "tm1637",
+    "assetto-corsa",
+    "ets2",
+    "multi-game",
+    "uno",
+    "hd44780",
+    "lcd",
+    "lfs",
+    "servo"
+  ],
+  "hardware": [
+    "NodeMCU ESP8266 (board marked ESP8266MOD) - the board actually in use",
+    "16-pin HD44780 character LCD (16x2 or 20x4) - replaced the broken HW-239 OLED. NodeMCU: RS:D1 E:D2 D4:D3 D5:D4 D6:D0 D7:D7, RW to GND, V0 to a 10k pot wiper, VDD/backlight to VIN. Uno: RS:12 E:11 D4:5 D5:4 D6:3 D7:2, VDD to 5V.",
+    "0.91 inch OLED 128x32 SSD1306 addr 0x3C - VCC:3V3, GND:G, SDA:D6 (GPIO12), SCL:D5 (GPIO14) (shows gear + RPM)",
+    "Second NodeMCU ESP8266 driving a TM1637 4-digit LED module alone (speed) - GND:G, VCC:3V3, DIO:D2, CLK:D1. NOT I2C despite the two-wire look, so it must not share pins with the OLEDs.",
+    "Keep off D3/D4/D8 - boot strapping pins; an OLED's pull-ups alone stop the board booting",
+    "ESP32 DevKit V1 (WROOM-32) - optional alternative, supported by the racedash/ sketch",
+    "Arduino Leonardo running EMC Lite - the steering wheel, NOT part of this project and never written to",
+    "Arduino Uno - alternative to the NodeMCU, runs racedash_uno. OLED on A4/A5 (I2C is fixed there), LCD parallel. 5V logic means no contrast compromise, but only 2KB RAM.",
+    "Servo rev counter (optional) - MG90S or similar swinging a needle over a printed dial. Signal to pin 9 (Uno) or D1 (NodeMCU). MUST have its own 5V supply with the ground shared to the board; the onboard regulator browns out and resets the dashboard otherwise."
+  ],
+  "docs": [
+    {
+      "label": "Step by step",
+      "path": "STEPS.md"
+    },
+    {
+      "label": "Readme",
+      "path": "README.md"
+    },
+    {
+      "label": "Other games",
+      "path": "GAMES.md"
+    },
+    {
+      "label": "Wiring",
+      "path": "WIRING.md"
+    },
+    {
+      "label": "Firmware (NodeMCU)",
+      "path": "racedash8266/racedash8266.ino"
+    },
+    {
+      "label": "I2C scanner (NodeMCU)",
+      "path": "i2c_scan8266/i2c_scan8266.ino"
+    },
+    {
+      "label": "Firmware (Arduino Uno)",
+      "path": "racedash_uno/racedash_uno.ino"
+    },
+    {
+      "label": "Firmware (LED speed board)",
+      "path": "segdash8266/segdash8266.ino"
+    },
+    {
+      "label": "Firmware (ESP32)",
+      "path": "racedash/racedash.ino"
+    },
+    {
+      "label": "PC bridge",
+      "path": "forza_bridge.py"
+    },
+    {
+      "label": "Multi-game bridge",
+      "path": "sim_bridge.py"
+    },
+    {
+      "label": "Port finder",
+      "path": "find_board.py"
+    },
+    {
+      "label": "Firmware (servo tacho, Uno)",
+      "path": "tacho_uno/tacho_uno.ino"
+    },
+    {
+      "label": "Firmware (servo tacho, NodeMCU)",
+      "path": "tacho8266/tacho8266.ino"
+    },
+    {
+      "label": "Dial face generator",
+      "path": "make_dial.py"
+    },
+    {
+      "label": "Dashboard (backend)",
+      "path": "dashboard.py"
+    },
+    {
+      "label": "Dashboard (page)",
+      "path": "dashboard.html"
+    }
+  ],
+  "apps": [
+    {
+      "label": "Open the dashboard",
+      "cmd": [
+        "python",
+        "dashboard.py",
+        "--no-open",
+        "--lan"
+      ],
+      "port": 8793
+    }
+  ],
+  "notes": "Both OLEDs are stuck at I2C address 0x3C. The ESP8266 has only one I2C bus, but it is bit-banged in software, so Wire.begin(sda,scl) re-points it onto a second pin pair before each panel is drawn - only one panel is ever on the pins being clocked, so the shared address never collides. Verified against esp8266 core 3.1.2 source: twi_init leaves the parked pins INPUT_PULLUP (bus idle) and preferred_si2c_clock survives re-init. Wire.pins() would NOT work - it only sets defaults without re-initialising. Costs about 22 fps against the ESP32's 30. Forza Horizon 5 sends 324-byte packets with the dash block at offset 244 (Horizon inserts 12 undocumented bytes that Forza Motorsport does not); Speed is at 256 in metres per second, Gear at 319. Reading FH5 with Motorsport offsets lands every field 12 bytes early, which is what most old tutorials get wrong. Both flash.ps1 and forza_bridge.py blocklist USB VIDs 2341/2A03/1B4F/0013 so neither can ever open or flash the Leonardo running EMC Lite. No dashboard web app, so nothing for the hub to launch - run forza_bridge.py from a terminal. forza_bridge.py drives every detected board at once and sends them the identical frame stream, so the LCD board (lcddash8266) and the OLED board (racedash8266) need no coordination; --port takes a comma-separated list to override. Two firmware bugs were found on real hardware and fixed: loop() compared a stale millis() snapshot against a lastFrameMs that serviceSerial() had just set later, so unsigned underflow made the dash blink WAITING mid-race (now a signed comparison in dataStale); and leaving the ESP8266 WiFi radio on corrupted telemetry frames, so setup() now powers it down and the UART is drained between panel writes. The 16x2 LCD was abandoned: unreadable at 3.3V even at full contrast. Replaced by a TM1637 4-digit LED module (segdash8266), which is far brighter and has 8 software brightness levels. lcddash8266/ is kept but unused. The TM1637 is bit-banged rather than using a library; both its lines idle high on the module's own pull-ups, and the output registers are parked LOW in setup() so pinMode alone switches between pulling a line down and releasing it - neither line is ever driven high. sim_bridge.py adds non-Forza games behind --game: 'ac' reads Assetto Corsa's acpmf_physics shared memory (gas@4 brake@8 gear@16 rpms@20 speedKmh@28; AC counts 0=R 1=N 2=first, so the bridge subtracts one), and 'ets2'/'ats' read Local\\SCSTelemetry published by the scs-sdk-plugin (gear@504 engineRpmMax@740 speed@948 m/s engineRpm@952 - offsets derived by walking the header's zone structs, self-checked because zone 3 starts at 500 and totals exactly 200 bytes to reach zone 4 at 700). The wire gear convention gained -1 = neutral, since AC and the truck sims shift through neutral constantly while Forza never reports it. The original Wreckfest (2018) has NO telemetry of any kind and cannot be supported; Wreckfest 2 has UDP telemetry and could be added. The HW-239 OLED broke and was replaced by a 16-pin HD44780 character LCD on the same board as the 0.91in OLED; racedash8266 v2.0 drives both, and racedash_uno is the Arduino Uno build of the same thing (same protocol, same layouts). LCD_COLS/LCD_ROWS/LCD_I2C at the top of each sketch select 16x2 vs 20x4 and parallel vs PCF8574 backpack. D3/D4 are used for LCD data on the NodeMCU, which contradicts the usual advice: strapping pins are only unsafe when the attached device PULLS them, and with RW tied to GND an HD44780's data pins are permanently high-impedance inputs. D8 is still avoided. The USB blocklist was narrowed from whole Arduino vendor IDs to the specific Leonardo PIDs (2341/2A03 x 0036/8036) plus VID 0013, because blocking the vendor also blocked the Uno once it became a supported board. find_board.py picks the port automatically and, with several boards attached, PINGs each one and matches the sketch name rather than guessing, so -Port is now optional everywhere. Live for Speed added as --game lfs: its built-in OutGauge UDP stream, enabled by three lines in the game's cfg.txt (OutGauge Mode 1 / IP / Port). OutGaugePack offsets Gear@10 (u8, 0=R 1=N 2=first, the same convention as AC) Speed@12 (f32 m/s) RPM@16 Throttle@48 Brake@52; a packet is 92 bytes, or 96 when OutGauge ID is non-zero, and both decode identically because the ID is appended after every field used. No max RPM in the packet, so the rev bar learns it. Forza and LFS now share a UdpSource base class, and best_max_rpm moved up to Source so every game can self-calibrate. An analogue servo rev counter can run either on the screen board (racedash_uno, SERVO_ENABLED) or on a board of its own (tacho_uno / tacho8266) - the bridges already feed every detected board the same frames, so a dedicated one needs no PC-side change. The needle is eased toward its target and gated by a 1-degree deadband: writing raw angles at 30Hz makes a servo buzz audibly and hunt visibly even when the revs are steady, the same lesson knob-servo learned with pot noise. It falls to SERVO_MIN_DEG when telemetry stops rather than freezing, since a stuck needle reads as live data. make_dial.py prints a dial whose ticks use the identical rpm-to-angle line as the firmware, so they cannot disagree. dashboard.py serves a local website on port 8793: live replicas of the 16x2 LCD and the 0.91in OLED drawn from the same layout logic as the firmware, both gauge dials driven from the reported servo pulse widths, a pin map, demo/game buttons and sliders that move the real servos. It OWNS the serial port, so no bridge may run at the same time - only one process can hold a COM port."
+}
